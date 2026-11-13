@@ -71,6 +71,9 @@ local applied = {}
 local dirty = false
 local timerToken = 0
 local clicked
+local awaiting            -- a cast asked for, waiting on the game to go through with it
+local castToken = 0
+local CAST_WAIT = 0.7     -- how long the game gets to start it
 local pip, counter, list, listPanel
 local unitButtons = {}
 
@@ -714,40 +717,87 @@ function BuffWatch:PrepareClick()
 end
 
 --- Called on the release of that click: says what was cast, or why nothing was.
+local function Say(text, kind)
+    if not text then return end
+    local notify = MB.db.buffwatch.notify
+    if notify == "toast" then
+        Theme:Toast(text, kind, true)
+    elseif notify == "chat" then
+        MB:Print(text)
+    end
+end
+
+--- What a click was meant to do, said only once the game has gone through with it.
+local function CastDescription(action)
+    local spell = API.SpellName(action.spell) or "Intellect"
+    if action.kind == "brilliance" then
+        return spell .. ": " .. action.benefit .. (action.benefit == 1 and " player needs it." or " players need it.")
+    end
+    local rank = action.downranked and RankNumber("intellect", action.spell)
+    local text = spell .. (rank and (" (Rank " .. rank .. ")") or "") .. " on " .. action.name .. "."
+    if action.waiting > 1 then
+        text = text .. " " .. (action.waiting - 1) .. " more to go."
+    end
+    return text
+end
+
+--- Why a cast the player asked for did not happen, where the game will say.
+local function WhyNot(spellID)
+    if C_Spell and C_Spell.IsSpellUsable then
+        local ok, usable, noPower = pcall(C_Spell.IsSpellUsable, spellID)
+        if ok and not IsSecret(noPower) and noPower then return "not enough mana" end
+        if ok and not IsSecret(usable) and usable == false then return "not ready" end
+    end
+    return nil
+end
+
+local function ReportCast(ok)
+    local wait = awaiting
+    if not wait then return end
+    awaiting = nil
+    castToken = castToken + 1
+
+    if ok then
+        local text = CastDescription(wait.action)
+        if wait.note then text = wait.note .. " " .. text end
+        Say(text, "ok")
+        return
+    end
+
+    -- The spell never went off: say so rather than claim a buff that is not there.
+    local spell = API.SpellName(wait.action.spell) or "The buff"
+    local why = WhyNot(wait.action.spell)
+    local who = (wait.action.kind == "brilliance") and "" or (" on " .. wait.action.name)
+    Say(spell .. who .. ": " .. (why or "the cast did not go off") .. ".", "warn")
+end
+
 function BuffWatch:AfterClick()
     local click = clicked
     clicked = nil
     local db = MB.db.buffwatch
     if not click or not (MB.db.general.enabled and db.enabled) then return end
 
-    local text, kind = nil, "info"
     if click.combat then
-        text, kind = "Buff Watch pauses in combat. Ctrl+right-click the orb for the player list.", "warn"
-    elseif click.action then
-        local action = click.action
-        local spell = API.SpellName(action.spell) or "Intellect"
-        if action.kind == "brilliance" then
-            text = spell .. ": " .. action.benefit .. (action.benefit == 1 and " player needs it." or " players need it.")
-        else
-            local rank = action.downranked and RankNumber("intellect", action.spell)
-            text = spell .. (rank and (" (Rank " .. rank .. ")") or "") .. " on " .. action.name .. "."
-            if action.waiting > 1 then
-                text = text .. " " .. (action.waiting - 1) .. " more to go."
-            end
-        end
-        if click.note then text = click.note .. " " .. text end
-        kind = "ok"
-    elseif click.note then
-        text = click.note
-    elseif not click.active then
-        text = "Buff Watch has nothing to watch here."
+        Say("Buff Watch pauses in combat. Ctrl+right-click the orb for the player list.", "warn")
+        return
     end
-    if not text then return end
 
-    if db.notify == "toast" then
-        Theme:Toast(text, kind, true)
-    elseif db.notify == "chat" then
-        MB:Print(text)
+    if click.action then
+        -- Nothing is said yet: whether the spell actually goes off is only
+        -- known when the game says so, and out of mana it does not.
+        castToken = castToken + 1
+        local token = castToken
+        awaiting = { action = click.action, note = click.note }
+        C_Timer.After(CAST_WAIT, function()
+            if token == castToken then ReportCast(false) end
+        end)
+        return
+    end
+
+    if click.note then
+        Say(click.note, "info")
+    elseif not click.active then
+        Say("Buff Watch has nothing to watch here.", "info")
     end
 end
 
@@ -980,6 +1030,23 @@ function BuffWatch:OnEnable()
     MB:RegisterEvent("UNIT_AURA", OnUnitEvent)
     MB:RegisterEvent("UNIT_CONNECTION", OnUnitEvent)
     MB:RegisterEvent("UNIT_FLAGS", OnUnitEvent)
+
+    -- The game going through with a cast, or refusing to.
+    MB:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", function(_, unit, _, spellID)
+        if unit ~= "player" or not awaiting then return end
+        if API.Num(spellID) == awaiting.action.spell then
+            ReportCast(true)
+        end
+    end)
+    local function CastStopped(_, unit, _, spellID)
+        if unit ~= "player" or not awaiting then return end
+        if API.Num(spellID) == awaiting.action.spell then
+            ReportCast(false)
+        end
+    end
+    MB:RegisterEvent("UNIT_SPELLCAST_FAILED", CastStopped)
+    MB:RegisterEvent("UNIT_SPELLCAST_FAILED_QUIET", CastStopped)
+    MB:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED", CastStopped)
 
     MB:RegisterEvent("GROUP_ROSTER_UPDATE", function()
         RefreshList() -- names can change even while combat blocks a full update

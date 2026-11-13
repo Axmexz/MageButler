@@ -62,21 +62,23 @@ Config.defaults = {
         blockedBuild = "",
         -- Items of water and food to offer, by who the player is to you and by
         -- their class (20 is one full stack). Standard numbers: two stacks of
-        -- food and no water for the classes without mana, two stacks of water
-        -- and one of food for everyone else. UNKNOWN is used when the client
-        -- does not report the class.
+        -- food and no water for the classes without mana, water and food for
+        -- everyone else, and nothing at all for another Mage, who can conjure
+        -- their own. A raid is longer than a dungeon, so it gets three stacks
+        -- of water instead of two. UNKNOWN stands in when the client does not
+        -- report the class.
         amounts = {
             party = {
                 WARRIOR = Row(0, 40), ROGUE = Row(0, 40), HUNTER = Row(40, 20),
                 PALADIN = Row(40, 20), SHAMAN = Row(40, 20), DRUID = Row(40, 20),
-                PRIEST = Row(40, 20), MAGE = Row(40, 20), WARLOCK = Row(40, 20),
+                PRIEST = Row(40, 20), MAGE = Row(0, 0), WARLOCK = Row(40, 20),
                 UNKNOWN = Row(40, 20),
             },
             raid = {
-                WARRIOR = Row(0, 40), ROGUE = Row(0, 40), HUNTER = Row(40, 20),
-                PALADIN = Row(40, 20), SHAMAN = Row(40, 20), DRUID = Row(40, 20),
-                PRIEST = Row(40, 20), MAGE = Row(40, 20), WARLOCK = Row(40, 20),
-                UNKNOWN = Row(40, 20),
+                WARRIOR = Row(0, 40), ROGUE = Row(0, 40), HUNTER = Row(60, 20),
+                PALADIN = Row(60, 20), SHAMAN = Row(60, 20), DRUID = Row(60, 20),
+                PRIEST = Row(60, 20), MAGE = Row(0, 0), WARLOCK = Row(60, 20),
+                UNKNOWN = Row(60, 20),
             },
             other = {
                 WARRIOR = Row(0, 20), ROGUE = Row(0, 20), HUNTER = Row(20, 20),

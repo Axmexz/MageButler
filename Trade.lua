@@ -495,6 +495,12 @@ local function UpdateFillButton()
 end
 
 -------------------------------------------------------------------------------
+--- Whether the player is holding Shift to keep this trade to themselves. Only
+--- the automatic pass watches for it: clicking Fill Trade is asking for it.
+function Trade:ShiftHeld()
+    return MB.db.trade.shiftSkips and IsShiftKeyDown() and true or false
+end
+
 --- Clears a remembered refusal so automatic filling is attempted again.
 function Trade:RetryAutomatic()
     autoBlocked = false
@@ -511,10 +517,11 @@ function Trade:OnEnable()
         job = nil
         UpdateFillButton()
         if not MB:IsActive() or not MB.db.trade.enabled or autoBlocked then return end
-        if IsShiftKeyDown() then return end -- hold Shift to trade without the butler
-        -- One automatic pass per trade, started on the next frame.
+        if Trade:ShiftHeld() then return end
+        -- One automatic pass per trade, started on the next frame. Shift is
+        -- read again there, so holding it a moment late still counts.
         C_Timer.After(0, function()
-            if tradeOpen and not job then
+            if tradeOpen and not job and not Trade:ShiftHeld() then
                 StartJob(false)
             end
         end)

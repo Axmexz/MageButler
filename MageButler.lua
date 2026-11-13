@@ -300,6 +300,7 @@ local SETTLE_TRIES = 16    -- give up waiting after this many asks
 MB.inventoryReady = false
 
 local settleToken = 0
+local settling = false      -- the new world is back and the bags are being asked
 local inventoryWaiters = {}
 
 --- Runs fn now if the bag contents can be trusted, otherwise once they can.
@@ -325,6 +326,7 @@ end
 local function MarkInventoryReady()
     if MB.inventoryReady then return end
     MB.inventoryReady = true
+    settling = false
     MB:RefreshInventory()
 
     local waiters = inventoryWaiters
@@ -349,8 +351,21 @@ local function WaitForInventory(tries)
     end)
 end
 
+--- Stops trusting the bags. A loading screen starts well before the new world
+--- is ready, and a bag update arriving in between reads as empty bags - which
+--- is what produced "low on reagents" straight after a teleport.
+local function FreezeInventory()
+    MB.inventoryReady = false
+    settling = false
+    settleToken = settleToken + 1   -- cancel any wait already running
+end
+
+MB:RegisterEvent("PLAYER_LEAVING_WORLD", FreezeInventory)
+MB:RegisterEvent("LOADING_SCREEN_ENABLED", FreezeInventory)
+
 MB:RegisterEvent("PLAYER_ENTERING_WORLD", function()
     MB.inventoryReady = false
+    settling = true
     WaitForInventory(0)
 end)
 
@@ -379,7 +394,9 @@ MB:RegisterEvent("PLAYER_LOGIN", function()
     -- The bags answering is the signal that the quiet period can end early.
     MB:RegisterEvent("BAG_UPDATE_DELAYED", function()
         if not MB.inventoryReady then
-            if API.BagSlots(0) > 0 then
+            -- Only once the world is back: during the loading screen itself a
+            -- bag update says nothing about what is in the bags.
+            if settling and API.BagSlots(0) > 0 then
                 settleToken = settleToken + 1
                 MarkInventoryReady()
             end

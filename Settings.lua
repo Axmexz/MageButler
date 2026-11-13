@@ -413,7 +413,7 @@ builders.radial = function(page)
     Slider(page, COLUMN, -30, 200, "Button size", "Size of the round buttons.", 28, 56, 2, whole,
         Field("radial", radial, "buttonSize"))
 
-    Checkbox(page, 0, -78, "Opening animation", "A short fade when the menu opens.",
+    Checkbox(page, 0, -78, "Menu animations", "A short fade when the menu opens, and a soft glow on a button as it is clicked.",
         Field("radial", radial, "animations"))
     Checkbox(page, COLUMN, -78, "Button labels", "Shows the name under each button.",
         Field("radial", radial, "showLabels"))
@@ -609,6 +609,9 @@ builders.trading = function(page)
         end)
     Checkbox(page, COLUMN, -28, "Show Fill Trade button", "Adds a Fill Trade button above the trade window for filling by hand.",
         Field("trade", trade, "showFillButton"))
+    Checkbox(page, COLUMN, -52, "Hold Shift to skip a trade",
+        "While you hold Shift as a trade window opens, nothing is offered automatically. The Fill Trade button still works, since clicking it is asking for it.",
+        Field("trade", trade, "shiftSkips"))
     Checkbox(page, 0, -52, "Match the player's level",
         "Offers the best rank the other player is high enough to eat or drink. Ranks above their level are left in your bags.",
         Field("trade", trade, "usableOnly"))

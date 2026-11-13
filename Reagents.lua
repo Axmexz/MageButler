@@ -74,23 +74,55 @@ function Reagents:State(key)
     return "ok"
 end
 
-function Reagents:RefreshInventory()
+-- A count that only dips for a moment - a stale read around a zone change, a
+-- rune spent on the cast that started a loading screen - must not raise a
+-- warning, so a shortage is checked again before anything is said.
+local WARN_CONFIRM = 1.5
+local pending = {}
+
+local function ReadCounts()
+    for _, key in ipairs(Reagents.ORDER) do
+        counts[key] = API.ItemCount(Reagents.ITEMS[key])
+    end
+end
+
+--- Raises the warnings that are still true a moment later.
+local function ConfirmWarnings()
+    ReadCounts()
     local low = {}
+    for _, key in ipairs(Reagents.ORDER) do
+        local state = Reagents:State(key)
+        if state ~= "low" and state ~= "none" then
+            warned[key] = nil
+        elseif pending[key] and not warned[key] and not merchantOpen then
+            warned[key] = true
+            low[#low + 1] = Reagents:Name(key) .. " (" .. counts[key] .. ")"
+        end
+    end
+    wipe(pending)
+    if #low > 0 and MB:IsActive() then
+        MB:Notify("Low on " .. table.concat(low, ", ") .. ".", "warn")
+    end
+end
+
+function Reagents:RefreshInventory()
+    ReadCounts()
+    local check = false
     for _, key in ipairs(self.ORDER) do
-        counts[key] = API.ItemCount(self.ITEMS[key])
         local state = self:State(key)
         if state == "low" or state == "none" then
-            -- Warn once per shortage; standing at a vendor is not the moment.
+            -- Standing at a vendor is not the moment to be told.
             if not warned[key] and not merchantOpen then
-                warned[key] = true
-                low[#low + 1] = self:Name(key) .. " (" .. counts[key] .. ")"
+                pending[key] = true
+                check = true
             end
         else
             warned[key] = nil
+            pending[key] = nil
         end
     end
-    if #low > 0 and MB:IsActive() then
-        MB:Notify("Low on " .. table.concat(low, ", ") .. ".", "warn")
+    if check then
+        MB:Debounce("reagent-warning", WARN_CONFIRM, ConfirmWarnings)
     end
 end
 

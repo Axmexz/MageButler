@@ -49,7 +49,13 @@ local function CountBest(list)
     return 0, nil
 end
 
-function Conjuring:RefreshInventory()
+-- A count that only dips for a moment - a stale read around a zone change, an
+-- item in flight during a trade - must not raise a warning, so a supply that
+-- reads empty is checked again before anything is said.
+local WARN_CONFIRM = 1.5
+local pending = {}
+
+local function ReadCounts()
     local shared, sharedBest = CountBest(SHARED)
     local water, waterBest = CountBest(WATER)
     local food, foodBest = CountBest(FOOD)
@@ -71,15 +77,42 @@ function Conjuring:RefreshInventory()
     end
     counts.gem = gems
     bestItem.gem = gemBest
+end
 
-    -- One warning at the moment a supply runs out, not on every bag update.
+--- Says what is still empty a moment after it first read empty.
+local function ConfirmMissing()
+    ReadCounts()
     for kind, label in pairs(LABEL) do
-        local state = self:State(kind)
-        if state == "none" and (lastState[kind] == "ok" or lastState[kind] == "low")
+        local state = Conjuring:State(kind)
+        if pending[kind] and state == "none"
             and MB:IsActive() and MB.db.conjuring.warnMissing then
             MB:Notify("Out of conjured " .. label .. ".", "warn")
         end
-        lastState[kind] = state
+        lastState[kind] = state   -- trusted now, whichever way it went
+    end
+    wipe(pending)
+end
+
+function Conjuring:RefreshInventory()
+    ReadCounts()
+
+    -- One warning at the moment a supply runs out, not on every bag update.
+    local check = false
+    for kind in pairs(LABEL) do
+        local state = self:State(kind)
+        if state == "none" then
+            -- Left for ConfirmMissing to judge, so lastState keeps the edge.
+            if lastState[kind] == "ok" or lastState[kind] == "low" then
+                pending[kind] = true
+            end
+            check = true
+        else
+            lastState[kind] = state
+            pending[kind] = nil
+        end
+    end
+    if check then
+        MB:Debounce("conjuring-warning", WARN_CONFIRM, ConfirmMissing)
     end
 end
 

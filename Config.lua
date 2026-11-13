@@ -58,6 +58,7 @@ Config.defaults = {
         enabled = true,
         showFillButton = true,
         usableOnly = true,
+        shiftSkips = true,
         blockedBuild = "",
         -- Items of water and food to offer, by who the player is to you and by
         -- their class (20 is one full stack). Standard numbers: two stacks of

@@ -238,9 +238,22 @@ local function CreateRoundButton(key, template)
     button:HookScript("OnLeave", function()
         GameTooltip:Hide()
     end)
+    -- Both click phases arrive here; light up on the one that acts.
+    button:HookScript("PostClick", function(self, _, down)
+        if not down then
+            Theme:Flash(self.flash, self.ring, Radial.RestoreRings)
+        end
+    end)
 
     buttons[key] = button
     return button
+end
+
+--- Puts the rings back to the colour the current state calls for, after a
+--- click flash has brightened one. The state may have changed during it: the
+--- click that opened a submenu turns its button's ring gold.
+function Radial.RestoreRings()
+    Radial:RefreshVisuals()
 end
 
 --- Visual state: available buttons are bright, unavailable ones are greyed.

@@ -390,6 +390,7 @@ MB:RegisterEvent("PLAYER_LOGIN", function()
 
     MB:RefreshInventory()
     MB:Fire("SETTINGS_CHANGED", "all")
+    MB.Settings:MaybeWelcome()
 end)
 
 -------------------------------------------------------------------------------
@@ -404,6 +405,7 @@ local function PrintHelp()
     MB:Print("  |cff5ed7ff/mb ready|r - show the preparation check")
     MB:Print("  |cff5ed7ff/mb buffs|r - open or close the Buff Watch player list")
     MB:Print("  |cff5ed7ff/mb fill|r - fill the open trade window")
+    MB:Print("  |cff5ed7ff/mb welcome|r - show the introduction again")
     MB:Print("  |cff5ed7ff/mb reset|r - move the orb and HUD back to their default positions")
 end
 
@@ -433,6 +435,8 @@ SlashCmdList["MAGEBUTLER"] = function(message)
         MB:Print(MB.db.general.showHUD and "HUD shown." or "HUD hidden.")
     elseif command == "ready" or command == "prep" or command == "check" then
         MB.Readiness:Report(true)
+    elseif command == "welcome" then
+        MB.Settings:ShowWelcome()
     elseif command == "buffs" or command == "buff" or command == "buffwatch" then
         MB.BuffWatch:ToggleList()
     elseif command == "fill" or command == "trade" then

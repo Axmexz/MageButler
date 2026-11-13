@@ -16,6 +16,11 @@ local FALLBACK_NAME = {
 }
 local FALLBACK_STACK = { runeT = 10, runeP = 10, powder = 20 }
 
+-- The level each reagent's spell is learned at: Teleport at 20, Portal at 40,
+-- Arcane Brilliance at 56. Below that the reagent is left alone entirely -
+-- not counted, not warned about and never bought.
+Reagents.MIN_LEVEL = { runeT = 20, runeP = 40, powder = 56 }
+
 local POPUP = "MAGEBUTLER_RESTOCK"
 
 local counts = {}
@@ -34,11 +39,30 @@ function Reagents:Count(key)
     return counts[key] or 0
 end
 
---- A reagent is tracked when it is enabled and the player knows a spell that
---- consumes it, so low-level Mages are not nagged about Rune of Portals.
-function Reagents:IsTracked(key)
+function Reagents:MinLevel(key)
+    return self.MIN_LEVEL[key] or 1
+end
+
+function Reagents:PlayerLevel()
+    return API.Num(UnitLevel("player"), 1) or 1
+end
+
+--- Why a reagent is being left alone: "off" when switched off, "level" when
+--- the Mage is too low for the spell that uses it, "spell" when they are high
+--- enough but have not learned it yet. nil means it is being tracked.
+function Reagents:InactiveReason(key)
     local config = MB.db.reagents.items[key]
-    return config ~= nil and config.enabled and MB.Spells:UsesReagent(key)
+    if config == nil or not config.enabled then return "off" end
+    if self:PlayerLevel() < self:MinLevel(key) then return "level" end
+    if not MB.Spells:UsesReagent(key) then return "spell" end
+    return nil
+end
+
+--- A reagent is tracked when it is switched on, the Mage is high enough, and
+--- they know a spell that consumes it, so low-level Mages are never nagged
+--- about Rune of Portals.
+function Reagents:IsTracked(key)
+    return self:InactiveReason(key) == nil
 end
 
 --- "ok", "low", "none", or "off" when the reagent is not tracked.
@@ -326,8 +350,14 @@ function Reagents:OnEnable()
         StaticPopup_Hide(POPUP)
     end)
 
-    -- Which reagents matter depends on the spells known.
+    -- Which reagents matter depends on the spells known and the level reached.
     MB:On("SPELLS_UPDATED", function()
         MB:RefreshInventory()
+    end)
+    MB:RegisterEvent("PLAYER_LEVEL_UP", function()
+        MB:Debounce("reagent-level", 1, function()
+            MB:RefreshInventory()
+            MB:Fire("SETTINGS_CHANGED", "reagents")
+        end)
     end)
 end

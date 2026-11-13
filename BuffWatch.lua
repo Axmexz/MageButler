@@ -24,6 +24,16 @@ local STRENGTH = {
 }
 local NO_MANA_CLASS = { WARRIOR = true, ROGUE = true }
 
+-- Lowest level a target must be to receive each rank. Classic-rules clients
+-- refuse a target well below the rank's own level, so buffing a low-level
+-- player with your best rank simply fails. These follow the usual vanilla
+-- pattern of ten levels under the rank; that is not confirmed on this client,
+-- which is why "Match the player's level" can be turned off.
+local MIN_TARGET_LEVEL = {
+    [1459] = 1, [1460] = 4, [1461] = 18, [10156] = 32, [10157] = 46, [27126] = 58,
+    [23028] = 46, [27127] = 58,
+}
+
 -- Used for "auto" scope when the spell's own description gives no answer.
 -- On WoW Forever the Arcane Brilliance tooltip reads "the target's party and
 -- raid", unlike original vanilla where it reached the target's party only.
@@ -81,6 +91,60 @@ local function BuffNames()
     if brilliance and brilliance ~= intellect then names[#names + 1] = brilliance end
     if #names > 0 then buffNames = names end
     return names
+end
+
+local rankCache = {}
+
+--- Every rank of "intellect" or "brilliance" the player knows, weakest first.
+local function KnownRanks(key)
+    local list = rankCache[key]
+    if list then return list end
+    list = {}
+    local ranks = Spells.RANKS[key]
+    for i = 1, #ranks do
+        if API.IsSpellKnown(ranks[i]) then
+            list[#list + 1] = ranks[i]
+        end
+    end
+    rankCache[key] = list
+    return list
+end
+
+local function LevelOf(unit)
+    local level = API.Num(UnitLevel(unit))
+    if level and level > 0 then return level end
+    return nil -- the client will not say; treat the target as able to take any rank
+end
+
+--- The strongest rank the player knows that a target of this level can
+--- receive. Without level matching, or without a level to go on, the
+--- strongest known rank; if even the weakest is too strong, the weakest.
+local function RankForLevel(key, level)
+    local list = KnownRanks(key)
+    if #list == 0 then return nil end
+    if not level or not MB.db.buffwatch.matchLevel then
+        return list[#list]
+    end
+    for i = #list, 1, -1 do
+        if level >= (MIN_TARGET_LEVEL[list[i]] or 1) then return list[i] end
+    end
+    return list[1]
+end
+
+--- Which rank a spell ID is, counting from 1. The rank tables list every rank
+--- weakest first, so the position is the rank number.
+local function RankNumber(key, spellID)
+    local ranks = Spells.RANKS[key]
+    for i = 1, #ranks do
+        if ranks[i] == spellID then return i end
+    end
+    return nil
+end
+
+--- Whether a target of this level can receive the given rank.
+local function CanReceive(spellID, level)
+    if not spellID or not level or not MB.db.buffwatch.matchLevel then return true end
+    return level >= (MIN_TARGET_LEVEL[spellID] or 1)
 end
 
 --- "buffed", "missing" or "unknown" (the client would not say), plus the
@@ -207,7 +271,6 @@ local function Evaluate()
     end
 
     local rebuff = db.watchExpiry and db.rebuffMinutes * 60 or nil
-    local myStrength = STRENGTH[intellect]
     local tokens = Tokens(context)
 
     for index = 1, #tokens do
@@ -233,11 +296,17 @@ local function Evaluate()
                     state.unreadable = state.unreadable + 1
                     state.byUnit[unit] = "unknown"
                 else
+                    -- The rank this player could actually receive, which on a
+                    -- low-level character is not the Mage's best one.
+                    local level = LevelOf(unit)
+                    local cast = RankForLevel("intellect", level)
+                    local castStrength = STRENGTH[cast]
+
                     local status = "ok"
                     if found == "missing" then
                         status = "missing"
-                    elseif not db.acceptLowerRanks and strength and myStrength and strength < myStrength then
-                        status = "missing" -- a weaker rank than the one this Mage would cast
+                    elseif not db.acceptLowerRanks and strength and castStrength and strength < castStrength then
+                        status = "missing" -- weaker than the rank this player could have
                     elseif rebuff and remaining and remaining < rebuff then
                         status = "expiring"
                     end
@@ -253,7 +322,9 @@ local function Evaluate()
                         name = API.Str(UnitName(unit)) or unit,
                         status = status,
                         remaining = remaining,
-                        reachable = Reachable(unit, intellect),
+                        level = level,
+                        cast = cast,
+                        reachable = Reachable(unit, cast or intellect),
                         subgroup = subgroup or 1,
                     }
                     state.units[#state.units + 1] = record
@@ -336,12 +407,14 @@ local function Recommend()
             worthIt = benefit >= (context == "raid" and db.raidThreshold or db.partyThreshold)
         else
             -- Group-scoped Brilliance in a raid: aim it at the subgroup that
-            -- gains the most, and judge it on the raid as a whole.
+            -- gains the most, and judge it on the raid as a whole. The player
+            -- it is aimed at has to be high enough level to receive it.
             local count, reach = {}, {}
             for i = 1, #needs do
                 local record = needs[i]
                 count[record.subgroup] = (count[record.subgroup] or 0) + 1
-                if record.reachable and not reach[record.subgroup] then
+                if record.reachable and not reach[record.subgroup]
+                    and CanReceive(brilliance, record.level) then
                     reach[record.subgroup] = record.unit
                 end
             end
@@ -368,13 +441,15 @@ local function Recommend()
         end
     end
 
-    -- Otherwise one player at a time, nearest need first, skipping anyone out of range.
+    -- Otherwise one player at a time, nearest need first, skipping anyone out
+    -- of range. Each is cast at the rank their own level can receive.
     for i = 1, #needs do
         local record = needs[i]
         if record.reachable then
             state.action = {
-                kind = "intellect", spell = intellect, unit = record.unit,
+                kind = "intellect", spell = record.cast or intellect, unit = record.unit,
                 name = record.name, waiting = #needs,
+                downranked = record.cast ~= nil and record.cast ~= intellect,
             }
             return
         end
@@ -396,17 +471,19 @@ local function ApplyAttributes()
         applied.spell, applied.unit, applied.orb = spell, unit, true
     end
 
-    local intellect, brilliance = Spells:GetBest("intellect"), Spells:GetBest("brilliance")
-    if applied.intellect ~= intellect or applied.brilliance ~= brilliance or not applied.buttons then
-        for i = 1, #unitButtons do
-            local button = unitButtons[i]
+    -- Each player's own button casts the rank that player can receive.
+    local brilliance = Spells:GetBest("brilliance")
+    for i = 1, #unitButtons do
+        local button = unitButtons[i]
+        local spellForUnit = RankForLevel("intellect", LevelOf(button.unit))
+        if button.appliedSpell ~= spellForUnit or button.appliedBrilliance ~= brilliance then
             -- "*" = whatever modifier keys are held.
-            button:SetAttribute("*type1", intellect and "spell" or nil)
-            button:SetAttribute("*spell1", intellect)
+            button:SetAttribute("*type1", spellForUnit and "spell" or nil)
+            button:SetAttribute("*spell1", spellForUnit)
             button:SetAttribute("*type2", brilliance and "spell" or nil)
             button:SetAttribute("*spell2", brilliance)
+            button.appliedSpell, button.appliedBrilliance = spellForUnit, brilliance
         end
-        applied.intellect, applied.brilliance, applied.buttons = intellect, brilliance, true
     end
 end
 
@@ -652,7 +729,8 @@ function BuffWatch:AfterClick()
         if action.kind == "brilliance" then
             text = spell .. ": " .. action.benefit .. (action.benefit == 1 and " player needs it." or " players need it.")
         else
-            text = spell .. " on " .. action.name .. "."
+            local rank = action.downranked and RankNumber("intellect", action.spell)
+            text = spell .. (rank and (" (Rank " .. rank .. ")") or "") .. " on " .. action.name .. "."
             if action.waiting > 1 then
                 text = text .. " " .. (action.waiting - 1) .. " more to go."
             end
@@ -696,8 +774,15 @@ local function UnitTooltip(self)
     else
         GameTooltip:AddLine("Buffed", 0.35, 0.9, 0.55)
     end
-    if type(record) == "table" and not record.reachable then
-        GameTooltip:AddLine("Out of range", 0.56, 0.63, 0.79)
+    if type(record) == "table" then
+        if not record.reachable then
+            GameTooltip:AddLine("Out of range", 0.56, 0.63, 0.79)
+        end
+        local rank = record.cast and RankNumber("intellect", record.cast)
+        if rank and record.level and record.cast ~= Spells:GetBest("intellect") then
+            GameTooltip:AddLine("Level " .. record.level .. ": Rank " .. rank .. " is the strongest they can take",
+                0.56, 0.63, 0.79, true)
+        end
     end
     GameTooltip:AddLine("Left-click: Arcane Intellect", 0.56, 0.63, 0.79)
     if Spells:GetBest("brilliance") then
@@ -895,6 +980,7 @@ function BuffWatch:OnEnable()
 
     MB:On("SPELLS_UPDATED", function()
         autoScope = nil
+        wipe(rankCache)
         BuffWatch:Queue()
     end)
     MB:On("INVENTORY_UPDATED", function()

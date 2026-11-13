@@ -539,7 +539,37 @@ local function RefreshAttributes()
     gem:SetAttribute("*item2", gemItem and ("item:" .. gemItem) or nil)
 end
 
---- Positions the buttons on the circle and the submenus beside it. Out of combat only.
+-- Where the open side is, for each combination of blocked edges. The key is
+-- "<horizontal>,<vertical>", where 1 means the low edge (left, bottom) is in
+-- the way and -1 the high one; the value is the angle pointing away from them.
+local OPEN_TOWARDS = {
+    ["1,0"] = 0, ["-1,0"] = 180, ["0,1"] = 90, ["0,-1"] = 270,
+    ["1,1"] = 45, ["1,-1"] = 315, ["-1,1"] = 135, ["-1,-1"] = 225,
+}
+
+--- Where the buttons will fit: the middle of the arc and how wide it is, in
+--- degrees. A span of 360 is the whole circle. Near a screen edge part of the
+--- circle is off screen, so the buttons move to whichever side has room.
+local function ArcFor(radius, size)
+    local cx, cy = orb:GetCenter()
+    if not cx then return 90, 360 end
+    local scale = orb:GetScale()
+    if not scale or scale <= 0 then scale = 1 end
+
+    -- Room a button needs from the orb's centre, in screen units.
+    local need = (radius + size / 2 + 6) * scale
+    local left, bottom = cx * scale, cy * scale
+    local right = UIParent:GetWidth() - left
+    local top = UIParent:GetHeight() - bottom
+
+    local dx = (left < need and 1 or 0) - (right < need and 1 or 0)
+    local dy = (bottom < need and 1 or 0) - (top < need and 1 or 0)
+    local towards = OPEN_TOWARDS[dx .. "," .. dy]
+    if not towards then return 90, 360 end -- room all round, or nowhere to go
+    return towards, 180
+end
+
+--- Positions the buttons and the submenus beside them. Out of combat only.
 function Radial:Layout()
     local db = MB.db.radial
     local size, radius = db.buttonSize, db.radius
@@ -554,10 +584,21 @@ function Radial:Layout()
         end
     end
 
+    local centre, span = ArcFor(radius, size)
+    self.arcCentre, self.arcSpan = centre, span
+
     local count = #visible
     for i = 1, count do
         local button = visible[i]
-        local angle = math.rad(90 - (i - 1) * 360 / count)
+        local degrees
+        if span >= 360 then
+            degrees = 90 - (i - 1) * 360 / count   -- from the top, clockwise
+        elseif count == 1 then
+            degrees = centre
+        else
+            degrees = centre + span / 2 - (i - 1) * span / (count - 1)
+        end
+        local angle = math.rad(degrees)
         button:SetSize(size, size)
         button:ClearAllPoints()
         button:SetPoint("CENTER", menu, "CENTER", radius * math.cos(angle), radius * math.sin(angle))
@@ -567,9 +608,10 @@ function Radial:Layout()
 
     local extent = (radius + size) * 2
     menu:SetSize(extent, extent)
-    -- The hairline ring sits at 124/128 of the texture's half-width.
+    -- The hairline ring sits at 124/128 of the texture's half-width. It only
+    -- makes sense while the buttons really do sit on a full circle.
     menu.orbit:SetSize(radius * 2 * 128 / 124, radius * 2 * 128 / 124)
-    menu.orbit:SetShown(count > 0)
+    menu.orbit:SetShown(count > 0 and span >= 360)
 
     -- Submenus open towards the middle of the screen.
     local openRight = true
@@ -746,6 +788,16 @@ function Radial:OnEnable()
     MB:RegisterEvent("PLAYER_REGEN_DISABLED", function()
         Radial:StopDrag()
     end)
+
+    -- A different resolution or UI scale moves the screen edges.
+    local function Relayout()
+        MB:AfterCombat("radial-layout", function()
+            Radial:ApplyPosition()
+            Radial:Layout()
+        end)
+    end
+    MB:RegisterEvent("DISPLAY_SIZE_CHANGED", Relayout)
+    MB:RegisterEvent("UI_SCALE_CHANGED", Relayout)
     MB:RegisterEvent("TRADE_SHOW", function()
         Radial:RefreshVisuals()
     end)

@@ -21,6 +21,7 @@ Config.defaults = {
         lockPositions = false,
         uiScale = 1.0,
         chatMessages = false,
+        welcomed = false,   -- the first-run greeting has been seen
     },
     orb = { x = -340, y = -120 },
     radial = {
@@ -99,6 +100,7 @@ Config.defaults = {
         preferBrilliance = true,
         fallbackIntellect = true,
         acceptLowerRanks = true,
+        matchLevel = true,
         scope = "auto",          -- what Arcane Brilliance covers: "auto", "group" or "raid"
         watchExpiry = true,
         rebuffMinutes = 5,

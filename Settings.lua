@@ -5,7 +5,7 @@ local _, MB = ...
 local Settings = MB:NewModule("Settings")
 local Theme
 
-local WIDTH, HEIGHT = 640, 496
+local WIDTH, HEIGHT = 640, 528
 local SIDEBAR = 152
 local TITLE = 38
 local COLUMN = 215 -- horizontal distance between option columns
@@ -472,37 +472,40 @@ builders.buffwatch = function(page)
         Field("buffwatch", watch, "preferBrilliance"))
     Checkbox(page, RIGHT, -162, "Fall back to Arcane Intellect", "Without Arcane Powder, buff players one at a time instead of doing nothing.",
         Field("buffwatch", watch, "fallbackIntellect"))
-    Checkbox(page, 0, -186, "Accept lower ranks", "Treat any rank of Arcane Intellect or Arcane Brilliance as buffed. Turn this off to flag ranks weaker than your own.",
+    Checkbox(page, 0, -186, "Accept lower ranks", "Treat any rank of Arcane Intellect or Arcane Brilliance as buffed. Turn this off to flag anyone carrying a weaker rank than they could have.",
         Field("buffwatch", watch, "acceptLowerRanks"))
+    Checkbox(page, 0, -210, "Match the player's level",
+        "Buffs a low-level player with the strongest rank their level can receive, instead of your own best rank, which the game would refuse. Turn this off to always cast your highest rank.",
+        Field("buffwatch", watch, "matchLevel"))
     Label(page, RIGHT, -190, "Brilliance covers", 12)
     Cycle(page, RIGHT + 110, -186, 104, "Arcane Brilliance covers",
         "Whether one cast reaches the target's group or the whole raid. Automatic reads the spell's own description.",
         { { "auto", "Automatic" }, { "group", "Target's group" }, { "raid", "Whole raid" } },
         Field("buffwatch", watch, "scope"))
 
-    Header(page, -216, "Duration and Targets")
-    Checkbox(page, 0, -244, "Watch for expiring buffs", "Count a buff that is about to run out as needing a rebuff.",
+    Header(page, -240, "Duration and Targets")
+    Checkbox(page, 0, -268, "Watch for expiring buffs", "Count a buff that is about to run out as needing a rebuff.",
         Field("buffwatch", watch, "watchExpiry"))
-    Label(page, RIGHT, -248, "Rebuff at (minutes)", 12)
-    NumberBox(page, RIGHT + 130, -244, 44, "Rebuff threshold", "A buff with less than this many minutes left counts as expiring. Longer buffs are left alone.", 1, 30,
+    Label(page, RIGHT, -272, "Rebuff at (minutes)", 12)
+    NumberBox(page, RIGHT + 130, -268, 44, "Rebuff threshold", "A buff with less than this many minutes left counts as expiring. Longer buffs are left alone.", 1, 30,
         Field("buffwatch", watch, "rebuffMinutes"))
-    Checkbox(page, 0, -268, "Ignore offline players", "Players who are disconnected are not counted.", Field("buffwatch", watch, "ignoreOffline"))
-    Checkbox(page, RIGHT, -268, "Ignore dead players", "Dead players and ghosts are not counted.", Field("buffwatch", watch, "ignoreDead"))
-    Checkbox(page, 0, -292, "Skip unavailable players", "Players in another zone or too far away to be seen are not counted.",
+    Checkbox(page, 0, -292, "Ignore offline players", "Players who are disconnected are not counted.", Field("buffwatch", watch, "ignoreOffline"))
+    Checkbox(page, RIGHT, -292, "Ignore dead players", "Dead players and ghosts are not counted.", Field("buffwatch", watch, "ignoreDead"))
+    Checkbox(page, 0, -316, "Skip unavailable players", "Players in another zone or too far away to be seen are not counted.",
         Field("buffwatch", watch, "skipUnavailable"))
-    Checkbox(page, RIGHT, -292, "Missing before expiring", "Buff players with no Intellect at all before refreshing buffs that are running out.",
+    Checkbox(page, RIGHT, -316, "Missing before expiring", "Buff players with no Intellect at all before refreshing buffs that are running out.",
         Field("buffwatch", watch, "missingFirst"))
-    Checkbox(page, 0, -316, "Mana users only", "Leave Warriors and Rogues out of the count.", Field("buffwatch", watch, "manaUsersOnly"))
+    Checkbox(page, 0, -340, "Mana users only", "Leave Warriors and Rogues out of the count.", Field("buffwatch", watch, "manaUsersOnly"))
 
-    Header(page, -346, "Display")
-    Checkbox(page, 0, -374, "Orb warning colours", "Tints the orb's ring yellow or red while buffs need attention.",
+    Header(page, -370, "Display")
+    Checkbox(page, 0, -398, "Orb warning colours", "Tints the orb's ring yellow or red while buffs need attention.",
         Field("buffwatch", watch, "orbColors"))
-    Checkbox(page, RIGHT, -374, "Coverage counter", "Shows group coverage such as 32/40 above the orb.",
+    Checkbox(page, RIGHT, -398, "Coverage counter", "Shows group coverage such as 32/40 above the orb.",
         Field("buffwatch", watch, "showCounter"))
-    Checkbox(page, 0, -398, "Names in tooltip", "Lists the players who need a buff in the orb's tooltip.",
+    Checkbox(page, 0, -422, "Names in tooltip", "Lists the players who need a buff in the orb's tooltip.",
         Field("buffwatch", watch, "tooltipNames"))
-    Label(page, RIGHT, -402, "Notifications", 12)
-    Cycle(page, RIGHT + 110, -398, 104, "Buff Watch notifications",
+    Label(page, RIGHT, -426, "Notifications", 12)
+    Cycle(page, RIGHT + 110, -422, 104, "Buff Watch notifications",
         "Where Buff Watch says what a right-click cast, or why it did nothing.",
         { { "toast", "On screen" }, { "chat", "Chat" }, { "off", "Off" } },
         Field("buffwatch", watch, "notify"))
@@ -529,10 +532,19 @@ builders.reagents = function(page)
         local function item() return MB.db.reagents.items[key] end
 
         local check = Checkbox(page, columns[1], y, Reagents:Name(key),
-            "Track and restock this reagent. It is only bought once you know a spell that uses it.",
+            "Track and restock this reagent. It is left alone until you are high enough and have learned a spell that uses it.",
             Field("reagents", item, "enabled"))
         refreshers[#refreshers + 1] = function()
-            check.text:SetText(Reagents:Name(key))
+            -- Say why a reagent is being left alone, rather than silently
+            -- doing nothing on a Mage who is not high enough yet.
+            local name = Reagents:Name(key)
+            local reason = Reagents:InactiveReason(key)
+            if reason == "level" then
+                name = name .. "  |cff8f9fc9(from level " .. Reagents:MinLevel(key) .. ")|r"
+            elseif reason == "spell" then
+                name = name .. "  |cff8f9fc9(spell not learned)|r"
+            end
+            check.text:SetText(name)
         end
 
         NumberBox(page, columns[2], y + 1, 48, "Target", "How many to carry after restocking.", 0, 200,
@@ -545,7 +557,7 @@ builders.reagents = function(page)
             Field("reagents", item, "confirm"))
     end
 
-    Note(page, -184, "Purchases never go past the target, your free bag space, your gold or the spending limit. Reagents already in your bags are counted first.")
+    Note(page, -184, "Rune of Teleportation is used from level 20, Rune of Portals from 40 and Arcane Powder from 56; until then they are left alone. Purchases never go past the target, your free bag space, your gold or the spending limit. Reagents already in your bags are counted first.")
 end
 
 builders.conjuring = function(page)
@@ -831,6 +843,103 @@ function Settings:Open(section)
         SelectPage(section)
     end
     Refresh()
+end
+
+-------------------------------------------------------------------------------
+-- First run: a short greeting, once per character
+-------------------------------------------------------------------------------
+local welcome
+
+local function CreateWelcome()
+    welcome = Theme:CreatePanel("MageButlerWelcome", UIParent, "bg")
+    welcome:SetSize(372, 272)
+    welcome:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
+    welcome:SetFrameStrata("DIALOG")
+    welcome:SetClampedToScreen(true)
+    welcome:SetMovable(true)
+    welcome:EnableMouse(true)
+    welcome:RegisterForDrag("LeftButton")
+    welcome:SetScript("OnDragStart", welcome.StartMoving)
+    welcome:SetScript("OnDragStop", welcome.StopMovingOrSizing)
+    welcome:Hide()
+    tinsert(UISpecialFrames, "MageButlerWelcome")
+
+    -- However it is closed, it has been seen.
+    welcome:SetScript("OnHide", function()
+        if MB.db then MB.db.general.welcomed = true end
+    end)
+
+    local icon = welcome:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(26, 26)
+    icon:SetPoint("TOPLEFT", 16, -14)
+    icon:SetTexture("Interface\\Icons\\Spell_Holy_MagicalSentry")
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    local title = Theme:Text(welcome, 15)
+    title:SetPoint("LEFT", icon, "RIGHT", 10, 0)
+    title:SetText("Welcome to MageButler")
+    Theme:UseAccent(title, "SetTextColor", 1)
+
+    local intro = Theme:Text(welcome, 12)
+    intro:SetPoint("TOPLEFT", 16, -54)
+    intro:SetWidth(340)
+    intro:SetJustifyH("LEFT")
+    intro:SetWordWrap(true)
+    intro:SetSpacing(3)
+    intro:SetText("Your orb is on screen now, a little to the right of the middle. Drag it wherever suits you.")
+
+    local clicks = Theme:Text(welcome, 12)
+    clicks:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 6, -12)
+    clicks:SetWidth(334)
+    clicks:SetJustifyH("LEFT")
+    clicks:SetSpacing(5)
+    local accent = Theme:AccentHex()
+    clicks:SetText(
+        accent .. "Left-click|r  the radial menu\n" ..
+        accent .. "Right-click|r  cast the buff your group needs\n" ..
+        accent .. "Shift + right-click|r  these settings")
+
+    local closing = Theme:Text(welcome, 11)
+    closing:SetPoint("TOPLEFT", clicks, "BOTTOMLEFT", -6, -14)
+    closing:SetWidth(340)
+    closing:SetJustifyH("LEFT")
+    closing:SetWordWrap(true)
+    closing:SetSpacing(3)
+    closing:SetTextColor(Theme:Color("dim"))
+    closing:SetText("Out of the box it restocks your reagents at vendors, fills trades with food and water, and keeps an eye on your group's Intellect. Reagents stay untouched until you are high enough to use them.")
+
+    local open = Theme:CreateButton(welcome, "Open settings", 120, 24)
+    open:SetPoint("BOTTOMRIGHT", -16, 14)
+    open:SetScript("OnClick", function()
+        welcome:Hide()
+        Settings:Open("general")
+    end)
+
+    local later = Theme:CreateButton(welcome, "Got it", 90, 24)
+    later:SetPoint("RIGHT", open, "LEFT", -8, 0)
+    later:SetScript("OnClick", function()
+        welcome:Hide()
+    end)
+
+    Settings.welcome = welcome
+end
+
+--- The first-run greeting. Shows itself once per character; `/mb welcome`
+--- brings it back.
+function Settings:ShowWelcome()
+    if not MB.ready then return end
+    if not welcome then CreateWelcome() end
+    welcome:Show()
+end
+
+function Settings:MaybeWelcome()
+    if MB.db.general.welcomed then return end
+    -- A few seconds in, so it does not land during the loading screen.
+    C_Timer.After(4, function()
+        if MB.ready and not MB.db.general.welcomed then
+            Settings:ShowWelcome()
+        end
+    end)
 end
 
 function Settings:OnEnable()

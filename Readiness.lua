@@ -11,6 +11,9 @@ local Theme, Conjuring, Reagents
 
 local ROW_HEIGHT = 18
 local MAX_ROWS = 7
+local PANEL_TOP, PANEL_BOTTOM = 30, 14   -- room above the first row and below the last
+
+local LABELS = { water = "Water", food = "Food", gem = "Mana Gem" }
 
 local items = {}
 local overall = "off"
@@ -30,16 +33,22 @@ local function Evaluate()
     overall = "off"
     if not (MB.db.general.enabled and MB.db.readiness.enabled) then return end
 
-    Add("Water", Conjuring:Count("water"), Conjuring:Target("water"), Conjuring:State("water"))
-    Add("Food", Conjuring:Count("food"), Conjuring:Target("food"), Conjuring:State("food"))
-    Add("Mana Gem", Conjuring:Count("gem"), Conjuring:Target("gem"), Conjuring:State("gem"))
+    -- Only what the player asked to be told about.
+    local want = MB.db.readiness.items
+    for _, kind in ipairs({ "water", "food", "gem" }) do
+        if want[kind] then
+            Add(LABELS[kind], Conjuring:Count(kind), Conjuring:Target(kind), Conjuring:State(kind))
+        end
+    end
     for _, key in ipairs(Reagents.ORDER) do
-        Add(Reagents:Name(key), Reagents:Count(key), MB.db.reagents.items[key].target, Reagents:State(key))
+        if want[key] then
+            Add(Reagents:Name(key), Reagents:Count(key), MB.db.reagents.items[key].target, Reagents:State(key))
+        end
     end
 
     -- Buff Watch: how much of the group carries Intellect.
     local watch = MB.BuffWatch
-    if watch and watch:GetOverall() ~= "off" then
+    if want.intellect and watch and watch:GetOverall() ~= "off" then
         local have, total = watch:GetCoverage()
         Add("Intellect buffs", have, total, watch:GetOverall())
     end
@@ -137,7 +146,7 @@ local function UpdatePanel()
             row:Hide()
         end
     end
-    panel:SetHeight(44 + math.max(1, math.min(#items, MAX_ROWS)) * ROW_HEIGHT)
+    panel:SetHeight(PANEL_TOP + PANEL_BOTTOM + math.max(1, math.min(#items, MAX_ROWS)) * ROW_HEIGHT)
 end
 
 local function CreatePanel()
@@ -160,7 +169,7 @@ local function CreatePanel()
     for i = 1, MAX_ROWS do
         local row = CreateFrame("Frame", nil, panel)
         row:SetSize(186, ROW_HEIGHT)
-        row:SetPoint("TOPLEFT", 12, -(30 + (i - 1) * ROW_HEIGHT))
+        row:SetPoint("TOPLEFT", 12, -(PANEL_TOP + (i - 1) * ROW_HEIGHT))
 
         row.icon = row:CreateTexture(nil, "ARTWORK")
         row.icon:SetSize(14, 14)
@@ -175,11 +184,57 @@ local function CreatePanel()
         panel.rows[i] = row
     end
 
-    -- Click anywhere on the checklist to dismiss it.
+    panel:SetMovable(true)
+    panel:RegisterForDrag("LeftButton")
+    panel:SetScript("OnDragStart", function(self)
+        if MB.db.general.lockPositions then return end
+        self.dragging = true
+        self:StartMoving()
+    end)
+    panel:SetScript("OnDragStop", function(self)
+        if not self.dragging then return end
+        self.dragging, self.justDragged = nil, true
+        self:StopMovingOrSizing()
+        local cx, cy = self:GetCenter()
+        local ux, uy = UIParent:GetCenter()
+        if cx and ux then
+            local scale = self:GetScale()
+            MB.db.readiness.x = cx * scale - ux
+            MB.db.readiness.y = cy * scale - uy
+        end
+    end)
+    -- Click anywhere on the checklist to dismiss it, unless that click was
+    -- the end of a drag.
     panel:SetScript("OnMouseUp", function(self)
+        if self.justDragged then
+            self.justDragged = nil
+            return
+        end
         self:Hide()
     end)
     panel:SetScript("OnShow", UpdatePanel)
+end
+
+--- Where the checklist sits: wherever it was last dragged to, otherwise clear
+--- of the radial menu, which surrounds the orb and would sit under it.
+function Readiness:PositionPanel()
+    if not panel then return end
+    local db = MB.db.readiness
+    local scale = MB.db.general.uiScale
+    panel:SetScale(scale)
+    panel:ClearAllPoints()
+
+    if db.x and db.y then
+        panel:SetPoint("CENTER", UIParent, "CENTER", db.x / scale, db.y / scale)
+        return
+    end
+    local orb = MB.RadialMenu.orb
+    if orb and orb:IsShown() then
+        local radial = MB.db.radial
+        panel:SetPoint("LEFT", orb, "RIGHT", radial.radius + radial.buttonSize / 2 + 14, 0)
+    else
+        panel:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
+    end
 end
 
 function Readiness:TogglePanel()
@@ -190,13 +245,7 @@ function Readiness:TogglePanel()
         return
     end
     Evaluate()
-    panel:ClearAllPoints()
-    local orb = MB.RadialMenu.orb
-    if orb and orb:IsShown() then
-        panel:SetPoint("BOTTOMLEFT", orb, "TOPRIGHT", 6, 6)
-    else
-        panel:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
-    end
+    Readiness:PositionPanel()
     panel:Show()
 end
 
@@ -260,7 +309,10 @@ function Readiness:OnEnable()
 
     MB:On("INVENTORY_UPDATED", Update)
     MB:On("SPELLS_UPDATED", Update)
-    MB:On("SETTINGS_CHANGED", Update)
+    MB:On("SETTINGS_CHANGED", function()
+        Readiness:PositionPanel()
+        Update()
+    end)
     MB:On("BUFFWATCH_UPDATED", Update)
 
     -- A ready check is exactly when the answer matters.

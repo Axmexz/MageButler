@@ -50,13 +50,20 @@ end
 -------------------------------------------------------------------------------
 -- Widgets
 -------------------------------------------------------------------------------
-local function Label(parent, x, y, text, size, colorName)
+--- `maxWidth` is for a label that sits beside a control: it holds the text to
+--- that width and stops it wrapping, so a long one is cut short instead of
+--- running under whatever is next to it.
+local function Label(parent, x, y, text, size, colorName, maxWidth)
     local label = Theme:Text(parent, size or 11)
     label:SetPoint("TOPLEFT", x, y)
     label:SetJustifyH("LEFT")
     label:SetText(text)
     if colorName then
         label:SetTextColor(Theme:Color(colorName))
+    end
+    if maxWidth then
+        label:SetWidth(maxWidth)
+        label:SetWordWrap(false)
     end
     return label
 end
@@ -300,10 +307,17 @@ local function StartCapture(button)
     end)
 end
 
+-- A keybinding row: a name, then the key button to its right. The name is
+-- held to its own width and does not wrap, so a long one is cut short rather
+-- than running under the button beside it.
+local KEY_COLUMN, KEY_GAP, KEY_WIDTH = 212, 116, 92
+
 local function KeybindRow(page, x, y, binding)
-    Label(page, x, y - 4, binding.label, 11)
-    local button = Theme:CreateButton(page, "", 100, 20)
-    button:SetPoint("TOPLEFT", x + 108, y)
+    local name = Label(page, x, y - 4, binding.label, 11)
+    name:SetWidth(KEY_GAP - 8)
+    name:SetWordWrap(false)
+    local button = Theme:CreateButton(page, "", KEY_WIDTH, 20)
+    button:SetPoint("TOPLEFT", x + KEY_GAP, y)
     button.action = binding.key
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     button:SetScript("OnClick", function(self, mouse)
@@ -316,7 +330,9 @@ local function KeybindRow(page, x, y, binding)
             StartCapture(self)
         end
     end)
-    Theme:AttachTooltip(button, binding.label, "Click, then press a key (modifiers allowed). Right-click to clear. Escape cancels.")
+    Theme:AttachTooltip(button, binding.label,
+        (binding.hint and (binding.hint .. " ") or "")
+        .. "Click, then press a key (modifiers allowed). Right-click to clear. Escape cancels.")
     refreshers[#refreshers + 1] = function()
         if not (capture and capture.button == button) then
             button.label:SetText(BindingText(MB.db.keybinds[binding.key]))
@@ -361,11 +377,30 @@ builders.general = function(page)
     Checkbox(page, COLUMN, -212, "Warn when entering instances", "Shows what is missing when you walk into a dungeon or raid short of supplies.",
         Field("general", readiness, "onInstance"))
 
-    Header(page, -246, "Character Profile")
-    local profileText = Label(page, 0, -272, "", 11, "dim")
+    Label(page, 0, -240, "Count towards ready", 10, "dim")
+    local prep = {
+        { "water", "Water", "conjured water" },
+        { "food", "Food", "conjured food" },
+        { "gem", "Mana Gem", "a mana gem" },
+        { "intellect", "Intellect", "how much of your group carries Arcane Intellect" },
+        { "runeT", "Rune T", "Rune of Teleportation" },
+        { "runeP", "Rune P", "Rune of Portals" },
+        { "powder", "Arcane", "Arcane Powder" },
+    }
+    local function prepItems() return MB.db.readiness.items end
+    for i = 1, #prep do
+        local column = (i - 1) % 4
+        local row = math.floor((i - 1) / 4)
+        Checkbox(page, column * 108, -258 - row * 24, prep[i][2],
+            "Count " .. prep[i][3] .. " in the preparation check. Anything you are not high enough to use stays out of it either way.",
+            Field("general", prepItems, prep[i][1]))
+    end
+
+    Header(page, -316, "Character Profile")
+    local profileText = Label(page, 0, -342, "", 11, "dim")
 
     local selected
-    local picker = PanelButton(page, 0, -294, "", 190, "Click to choose which character to copy from.", function(self)
+    local picker = PanelButton(page, 0, -364, "", 190, "Click to choose which character to copy from.", function(self)
         local list = MB.Config:GetOtherProfiles()
         if #list == 0 then return end
         local index = 1
@@ -375,12 +410,12 @@ builders.general = function(page)
         selected = list[index]
         self.label:SetText(selected)
     end)
-    local copy = PanelButton(page, 198, -294, "Copy settings", 110, "Replaces this character's settings with the selected character's.", function()
+    local copy = PanelButton(page, 198, -364, "Copy settings", 110, "Replaces this character's settings with the selected character's.", function()
         if selected and MB.Config:CopyFrom(selected) then
             MB:Print("settings copied from " .. selected .. ".")
         end
     end)
-    PanelButton(page, 316, -294, "Reset defaults", 110, "Restores every MageButler setting for this character.", function()
+    PanelButton(page, 316, -364, "Reset defaults", 110, "Restores every MageButler setting for this character.", function()
         MB.Config:Reset()
         MB:Print("settings reset to defaults.")
     end)
@@ -398,8 +433,8 @@ builders.general = function(page)
         copy:SetEnabled(selected ~= nil)
     end
 
-    Label(page, 0, -340, "MageButler v" .. MB.version .. "  |cff8f9fc9by " .. MB.author .. "|r", 12)
-    Label(page, 0, -358, "Your personal Mage assistant for WoW Forever.  /mb for commands.", 10, "dim")
+    Label(page, 0, -410, "MageButler v" .. MB.version .. "  |cff8f9fc9by " .. MB.author .. "|r", 12)
+    Label(page, 0, -428, "Your personal Mage assistant for WoW Forever.  /mb for commands.", 10, "dim")
 end
 
 builders.radial = function(page)
@@ -439,7 +474,7 @@ builders.radial = function(page)
     for i = 1, #bindings do
         local column = (i - 1) % 2
         local row = math.floor((i - 1) / 2)
-        KeybindRow(page, column * 218, -250 - row * 26, bindings[i])
+        KeybindRow(page, column * KEY_COLUMN, -250 - row * 26, bindings[i])
     end
     Note(page, -334, "Spells are always cast by your own key press or click. Keys set here work while MageButler is enabled and override the game's binding for the same key.")
 end
@@ -460,11 +495,11 @@ builders.buffwatch = function(page)
     Checkbox(page, 0, -76, "Watch while solo", "When you are not grouped, right-clicking the orb buffs you.", Field("buffwatch", watch, "solo"))
 
     Header(page, -106, "Buff Selection")
-    Label(page, 0, -138, "Party threshold", 12)
+    Label(page, 0, -138, "Party threshold", 12, nil, 124)
     NumberBox(page, 130, -134, 44, "Party threshold",
         "In a party, use Arcane Brilliance once this many players need Intellect. Below that, players are buffed one at a time.", 1, 5,
         Field("buffwatch", watch, "partyThreshold"))
-    Label(page, RIGHT, -138, "Raid threshold", 12)
+    Label(page, RIGHT, -138, "Raid threshold", 12, nil, 124)
     NumberBox(page, RIGHT + 130, -134, 44, "Raid threshold",
         "In a raid, use Arcane Brilliance once this many players across the whole raid need Intellect.", 1, 40,
         Field("buffwatch", watch, "raidThreshold"))
@@ -477,7 +512,7 @@ builders.buffwatch = function(page)
     Checkbox(page, 0, -210, "Match the player's level",
         "Buffs a low-level player with the strongest rank their level can receive, instead of your own best rank, which the game would refuse. Turn this off to always cast your highest rank.",
         Field("buffwatch", watch, "matchLevel"))
-    Label(page, RIGHT, -190, "Brilliance covers", 12)
+    Label(page, RIGHT, -190, "Brilliance covers", 12, nil, 104)
     Cycle(page, RIGHT + 110, -186, 104, "Arcane Brilliance covers",
         "Whether one cast reaches the target's group or the whole raid. Automatic reads the spell's own description.",
         { { "auto", "Automatic" }, { "group", "Target's group" }, { "raid", "Whole raid" } },
@@ -486,7 +521,7 @@ builders.buffwatch = function(page)
     Header(page, -240, "Duration and Targets")
     Checkbox(page, 0, -268, "Watch for expiring buffs", "Count a buff that is about to run out as needing a rebuff.",
         Field("buffwatch", watch, "watchExpiry"))
-    Label(page, RIGHT, -272, "Rebuff at (minutes)", 12)
+    Label(page, RIGHT, -272, "Rebuff at (minutes)", 12, nil, 124)
     NumberBox(page, RIGHT + 130, -268, 44, "Rebuff threshold", "A buff with less than this many minutes left counts as expiring. Longer buffs are left alone.", 1, 30,
         Field("buffwatch", watch, "rebuffMinutes"))
     Checkbox(page, 0, -292, "Ignore offline players", "Players who are disconnected are not counted.", Field("buffwatch", watch, "ignoreOffline"))
@@ -504,7 +539,7 @@ builders.buffwatch = function(page)
         Field("buffwatch", watch, "showCounter"))
     Checkbox(page, 0, -422, "Names in tooltip", "Lists the players who need a buff in the orb's tooltip.",
         Field("buffwatch", watch, "tooltipNames"))
-    Label(page, RIGHT, -426, "Notifications", 12)
+    Label(page, RIGHT, -426, "Notifications", 12, nil, 104)
     Cycle(page, RIGHT + 110, -422, 104, "Buff Watch notifications",
         "Where Buff Watch says what a right-click cast, or why it did nothing.",
         { { "toast", "On screen" }, { "chat", "Chat" }, { "off", "Off" } },
@@ -565,10 +600,10 @@ builders.conjuring = function(page)
     local function cells() return MB.db.hud.cells end
 
     Header(page, 0, "Conjuring")
-    Label(page, 0, -34, "Water to carry", 12)
+    Label(page, 0, -34, "Water to carry", 12, nil, 114)
     NumberBox(page, 120, -30, 52, "Water target", "Counted in items (20 is one full stack). Used by the HUD and the preparation check. 0 turns tracking off.", 0, 400,
         Field("conjuring", conjuring, "waterTarget"))
-    Label(page, COLUMN, -34, "Food to carry", 12)
+    Label(page, COLUMN, -34, "Food to carry", 12, nil, 114)
     NumberBox(page, COLUMN + 120, -30, 52, "Food target", "Counted in items (20 is one full stack). 0 turns tracking off.", 0, 400,
         Field("conjuring", conjuring, "foodTarget"))
 
@@ -619,7 +654,7 @@ builders.trading = function(page)
     -- One table of plain numbers per class; the selector picks whose table
     -- is shown: party members, raid members or everyone else.
     local selected = "party"
-    Label(page, 0, -90, "Amounts for", 12)
+    Label(page, 0, -90, "Amounts for", 12, nil, 86)
     Cycle(page, 92, -86, 130, "Amounts for",
         "Which set of numbers the table below shows and edits. Each kind of trade partner has its own.",
         { { "party", "Party members" }, { "raid", "Raid members" }, { "other", "Other players" } },
@@ -649,7 +684,7 @@ builders.trading = function(page)
         local function row() return MB.db.trade.amounts[selected][class] end
         local name = MB.Trade:ClassName(class)
 
-        local label = Label(page, x, y - 4, name, 12)
+        local label = Label(page, x, y - 4, name, 12, nil, 88)
         local colour = classColors and classColors[class]
         if colour and colour.r then
             label:SetTextColor(colour.r, colour.g, colour.b)
@@ -680,7 +715,7 @@ builders.appearance = function(page)
     local function appearance() return MB.db.appearance end
 
     Header(page, 0, "Appearance")
-    Label(page, 0, -34, "Accent colour", 12)
+    Label(page, 0, -34, "Accent colour", 12, nil, 114)
     local accent = PanelButton(page, 120, -29, "", 130, "Click to cycle through the accent colours.", function()
         local order = Theme.accentOrder
         local index = 1

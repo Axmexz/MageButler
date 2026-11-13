@@ -88,6 +88,7 @@ Config.defaults = {
     },
     buffwatch = {
         enabled = true,
+        x = nil, y = nil,          -- set once the player list has been dragged
         party = true,
         raid = true,
         solo = true,
@@ -128,6 +129,13 @@ Config.defaults = {
         enabled = true,
         onReadyCheck = true,
         onInstance = true,
+        x = nil, y = nil,          -- set once the checklist has been dragged
+        -- What the check counts. A reagent or buff that is not being tracked
+        -- stays out of it whatever this says.
+        items = {
+            water = true, food = true, gem = true, intellect = true,
+            runeT = true, runeP = true, powder = true,
+        },
     },
     appearance = {
         accent = "arcane",
@@ -279,4 +287,7 @@ end
 function Config:ResetPositions()
     MB.db.orb.x, MB.db.orb.y = self.defaults.orb.x, self.defaults.orb.y
     MB.db.hud.x, MB.db.hud.y = self.defaults.hud.x, self.defaults.hud.y
+    -- Back to following the orb.
+    MB.db.buffwatch.x, MB.db.buffwatch.y = nil, nil
+    MB.db.readiness.x, MB.db.readiness.y = nil, nil
 end

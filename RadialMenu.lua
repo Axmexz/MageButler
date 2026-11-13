@@ -34,12 +34,19 @@ local ROW_WIDTH, ROW_HEIGHT = 150, 24
 local SUB_PAD, SUB_HEADER = 8, 30
 
 -- Keybind actions -> the button a key press clicks.
+-- `label` is read in the settings panel, where it shares a narrow row with the
+-- key button, so each one is kept short; `hint` says the rest in the tooltip.
 Radial.BINDINGS = {
-    { key = "toggle", label = "Toggle radial menu", button = "MageButlerOrb", click = "LeftButton" },
-    { key = "water", label = "Conjure Water", button = "MageButlerButton_water", click = "LeftButton" },
-    { key = "food", label = "Conjure Food", button = "MageButlerButton_food", click = "LeftButton" },
-    { key = "gem", label = "Conjure Mana Gem", button = "MageButlerButton_gem", click = "LeftButton" },
-    { key = "useGem", label = "Use Mana Gem", button = "MageButlerButton_gem", click = "RightButton" },
+    { key = "toggle", label = "Radial menu", hint = "Opens and closes the radial menu.",
+      button = "MageButlerOrb", click = "LeftButton" },
+    { key = "water", label = "Conjure Water", hint = "Casts your highest rank of Conjure Water.",
+      button = "MageButlerButton_water", click = "LeftButton" },
+    { key = "food", label = "Conjure Food", hint = "Casts your highest rank of Conjure Food.",
+      button = "MageButlerButton_food", click = "LeftButton" },
+    { key = "gem", label = "Conjure Gem", hint = "Conjures the strongest mana gem you are not carrying.",
+      button = "MageButlerButton_gem", click = "LeftButton" },
+    { key = "useGem", label = "Use Gem", hint = "Uses the best mana gem in your bags.",
+      button = "MageButlerButton_gem", click = "RightButton" },
 }
 
 local orb, menu

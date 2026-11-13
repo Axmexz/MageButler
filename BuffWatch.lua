@@ -849,7 +849,29 @@ local function CreateList()
     listPanel = Theme:CreatePanel(nil, list, "bg")
     listPanel:SetPoint("TOPLEFT", list, "TOPLEFT", -LIST_PAD, LIST_HEADER)
     listPanel:SetFrameLevel(list:GetFrameLevel())
-    listPanel:EnableMouse(false)
+
+    -- The backdrop is the handle: dragging it moves the list. The list holds
+    -- secure buttons, so it can only be moved out of combat.
+    list:SetMovable(true)
+    listPanel:EnableMouse(true)
+    listPanel:RegisterForDrag("LeftButton")
+    listPanel:SetScript("OnDragStart", function()
+        if MB.db.general.lockPositions or InCombatLockdown() then return end
+        listPanel.dragging = true
+        list:StartMoving()
+    end)
+    listPanel:SetScript("OnDragStop", function()
+        if not listPanel.dragging then return end
+        listPanel.dragging = nil
+        list:StopMovingOrSizing()
+        local cx, cy = list:GetCenter()
+        local ux, uy = UIParent:GetCenter()
+        if cx and ux then
+            local scale = list:GetScale()
+            MB.db.buffwatch.x = cx * scale - ux
+            MB.db.buffwatch.y = cy * scale - uy
+        end
+    end)
 
     listPanel.title = Theme:Text(listPanel, 12)
     listPanel.title:SetPoint("TOPLEFT", 12, -9)
@@ -884,10 +906,18 @@ local function CreateList()
     BuffWatch.list = list
 end
 
+--- Where the player list sits: wherever it was last dragged to, otherwise
+--- above the orb and clear of the radial menu.
 function BuffWatch:PositionList()
-    local radial = MB.db.radial
-    list:SetScale(MB.db.general.uiScale)
+    local db = MB.db.buffwatch
+    local scale = MB.db.general.uiScale
+    list:SetScale(scale)
     list:ClearAllPoints()
+    if db.x and db.y then
+        list:SetPoint("CENTER", UIParent, "CENTER", db.x / scale, db.y / scale)
+        return
+    end
+    local radial = MB.db.radial
     list:SetPoint("BOTTOM", MB.RadialMenu.orb, "TOP", 0, radial.radius + radial.buttonSize + 12)
 end
 

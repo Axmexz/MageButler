@@ -1,0 +1,37 @@
+All Rights Reserved
+
+Copyright (c) 2026-present Padre Pidisc
+
+All rights to this software and its associated documentation are reserved
+by the copyright holder. No part of this software may be modified,
+redistributed, sublicensed, or used to create derivative works without
+explicit written permission from the copyright holder.
+
+Viewing, downloading or forking this code does not grant any license to
+modify or redistribute it. In the absence of a permissive license, all
+rights are reserved by default under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+Distribution
+
+This addon may only be distributed by the copyright holder, through the
+official channels the copyright holder publishes it on.
+
+Redistribution through any other platform or channel requires explicit
+written permission from the copyright holder.
+
+Contributions
+
+Contributions are welcome by arrangement with the author, but all
+contributed code becomes subject to this license.
+
+World of Warcraft is a trademark of Blizzard Entertainment, Inc. MageButler
+is an unofficial fan-made addon and is not affiliated with or endorsed by
+Blizzard Entertainment.

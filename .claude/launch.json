@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "magebutler-harness",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "tests\\serve.ps1",
+        "-Port",
+        "8765",
+        "-AddonDir",
+        ".",
+        "-HarnessDir",
+        "tests"
+      ],
+      "port": 8765
+    }
+  ]
+}

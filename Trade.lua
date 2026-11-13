@@ -19,8 +19,8 @@ local MAX_STEPS = 30
 local STEP_GAP = 0.05    -- pause between two stacks: about a frame
 local VERIFY_WAIT = 0.4  -- how long the trade window gets to show a stack
 
--- Classes without a mana bar have no use for water.
-local FOOD_ONLY_CLASS = { WARRIOR = true, ROGUE = true }
+-- Classes with their own row in the trade settings, in display order.
+Trade.CLASSES = MB.Config.CLASSES
 
 local tradeOpen = false
 local autoBlocked = false
@@ -72,41 +72,55 @@ local function PartnerPreset()
     return "other"
 end
 
-function Trade:GetPreset()
-    local name = PartnerPreset()
-    return MB.db.trade.presets[name], name
+--- "party", "raid" or "other" for the current trade partner.
+function Trade:GetRelation()
+    return PartnerPreset()
 end
 
---- What to offer this trade partner: the preset's amounts, with the water
---- left out for classes that cannot drink it. Returns water, food, the preset
---- name and whether the water was dropped for the partner's class.
+--- The trade partner's class token ("WARRIOR", "PRIEST", ...) and level, when
+--- the client will say.
+local function Partner()
+    local _, class = UnitClass("NPC")
+    if MB.IsSecret(class) or type(class) ~= "string" then class = nil end
+    local level = API.Num(UnitLevel("NPC"))
+    if level and level <= 0 then level = nil end
+    return class, level
+end
+
+function Trade:ClassName(class)
+    local names = _G.LOCALIZED_CLASS_NAMES_MALE
+    local name = names and names[class]
+    if type(name) == "string" and name ~= "" then return name end
+    return class:sub(1, 1) .. class:sub(2):lower()
+end
+
+--- What to offer this trade partner: the configured number of water and food
+--- for their relation to the player (party, raid, other) and their class.
+--- Returns water, food, the relation and the class token (nil if unknown).
 function Trade:GetAmounts()
-    local preset, name = self:GetPreset()
-    local water, food = preset.water, preset.food
-    local foodOnly = false
-    if MB.db.trade.classAware and water > 0 then
-        local _, class = UnitClass("NPC")
-        if not MB.IsSecret(class) and class and FOOD_ONLY_CLASS[class] then
-            water = 0
-            foodOnly = true
-        end
-    end
-    return water, food, name, foodOnly
+    local relation = self:GetRelation()
+    local class = Partner()
+    local rows = MB.db.trade.amounts[relation]
+    local row = (class and rows[class]) or rows.UNKNOWN
+    return row.water, row.food, relation, class
 end
 
 -------------------------------------------------------------------------------
 -- Bag search
 -------------------------------------------------------------------------------
---- Finds the bag stack to offer next. Prefers the best item rank, then one
---- stack that covers the whole amount (smallest that does), then the largest
---- stack. Returns bag, slot, itemID, stackCount - or nil plus whether a
---- suitable stack exists but is locked right now.
-local function FindSource(kind, need)
-    local locked = false
+--- Finds the bag stack to offer next. Prefers the best item rank the partner
+--- can use, then one stack that covers the whole amount (smallest that does),
+--- then the largest stack. Returns bag, slot, itemID, stackCount - or nil,
+--- whether a suitable stack exists but is locked right now, and whether the
+--- only stacks left are above the partner's level.
+local function FindSource(kind, need, maxLevel)
+    local locked, tooHigh = false, false
     local items = MB.Conjuring:ItemsBestFirst(kind)
     for i = 1, #items do
         local wanted = items[i]
-        if API.ItemCount(wanted) > 0 then
+        if API.ItemCount(wanted) > 0 and maxLevel and MB.Conjuring:MinLevel(wanted) > maxLevel then
+            tooHigh = true
+        elseif API.ItemCount(wanted) > 0 then
             local coverBag, coverSlot, coverCount
             local bigBag, bigSlot, bigCount
             for bag = 0, MB.LAST_BAG do
@@ -130,7 +144,7 @@ local function FindSource(kind, need)
             if bigBag then return bigBag, bigSlot, wanted, bigCount end
         end
     end
-    return nil, locked
+    return nil, locked, tooHigh
 end
 
 local function FindEmptyBagSlot()
@@ -180,29 +194,49 @@ local function Finish(problem)
     if done.placed.water > 0 then parts[#parts + 1] = done.placed.water .. " Water" end
     if done.placed.food > 0 then parts[#parts + 1] = done.placed.food .. " Food" end
 
-    local shortfall = {}
-    if done.short.water > 0 then shortfall[#shortfall + 1] = done.short.water .. " water" end
-    if done.short.food > 0 then shortfall[#shortfall + 1] = done.short.food .. " food" end
+    -- What could not be offered: either there was none left, or what is left
+    -- is a rank the partner's level cannot use.
+    local shortfall, missingKinds, tooLow = {}, {}, {}
+    for _, kind in ipairs({ "water", "food" }) do
+        if done.levelBlocked[kind] then
+            tooLow[#tooLow + 1] = kind
+        elseif done.short[kind] > 0 then
+            shortfall[#shortfall + 1] = done.short[kind] .. " " .. kind
+            missingKinds[#missingKinds + 1] = kind
+        end
+    end
+
+    local extra = {}
+    if #tooLow > 0 then
+        extra[#extra + 1] = "Level " .. (done.maxLevel or "?") .. " is too low for the "
+            .. table.concat(tooLow, " and ") .. " you carry."
+    end
 
     local label = done.manual and "Trade: " or "Auto-trade: "
+    local warn = #shortfall > 0 or #tooLow > 0 or problem ~= nil
+    local text
     if #parts > 0 then
-        local text = label .. "filled trade with " .. table.concat(parts, " and ") .. "."
-        if done.foodOnly then
-            text = text .. " No water: this class has no mana."
-        end
+        text = label .. "filled trade with " .. table.concat(parts, " and ") .. "."
         if #shortfall > 0 then
             text = text .. " Short by " .. table.concat(shortfall, " and ") .. "."
-        elseif problem then
-            text = text .. " " .. problem
         end
-        MB:Notify(text, (#shortfall > 0 or problem) and "warn" or "ok")
     elseif problem then
-        MB:Notify(label .. problem, "warn")
+        text = label .. problem
+        problem = nil
     elseif #shortfall > 0 then
-        MB:Notify(label .. "no conjured " .. table.concat(shortfall, " or ") .. " to offer.", "warn")
+        text = label .. "no conjured " .. table.concat(missingKinds, " or ") .. " to offer."
+    elseif #tooLow > 0 then
+        text = label .. "nothing offered."
     elseif done.manual then
-        MB:Notify("Trade already holds the configured food and water.", "info")
+        text = "Trade already holds the configured food and water."
     end
+    if not text then return end
+
+    if problem then extra[#extra + 1] = problem end
+    if #extra > 0 then
+        text = text .. " " .. table.concat(extra, " ")
+    end
+    MB:Notify(text, warn and "warn" or ((#parts > 0) and "ok" or "info"))
 end
 
 --- Stops offering and confirms what the trade window actually took. Only
@@ -271,12 +305,15 @@ Step = function()
             return Verify("your cursor is holding something, so nothing more was moved.")
         end
 
-        local bag, slot, itemID, count = FindSource(kind, need[kind])
+        local bag, slot, itemID, count = FindSource(kind, need[kind], current.maxLevel)
         if not bag then
-            local locked = slot
+            local locked, tooHigh = slot, itemID
             if locked and current.lockWaits < 12 then
                 current.lockWaits = current.lockWaits + 1
                 return Continue(0.15)
+            end
+            if tooHigh then
+                current.levelBlocked[kind] = true
             end
             -- Nothing (more) of this kind to give; move on to the next kind.
             current.short[kind] = current.short[kind] + need[kind]
@@ -344,16 +381,19 @@ end
 
 local function StartJob(manual)
     if job or not tradeOpen then return end
-    local wantWater, wantFood, _, foodOnly = Trade:GetAmounts()
+    local wantWater, wantFood = Trade:GetAmounts()
 
     local water, food = Offered()
     if not manual and wantWater - water <= 0 and wantFood - food <= 0 then
         return -- nothing configured for this kind of trade partner
     end
 
+    -- With the option on, only ranks the partner's level can use are offered.
+    local _, level = Partner()
     job = {
         manual = manual,
-        foodOnly = foodOnly,
+        maxLevel = MB.db.trade.usableOnly and level or nil,
+        levelBlocked = {},
         target = { water = wantWater, food = wantFood },
         base = { water = water, food = food },
         sent = { water = 0, food = 0 },
@@ -403,13 +443,16 @@ function Trade:Fill(manual)
 end
 
 function Trade:DescribePreset()
-    local water, food, name, foodOnly = self:GetAmounts()
-    local label = name:sub(1, 1):upper() .. name:sub(2)
-    local text = label .. " preset: " .. water .. " water, " .. food .. " food"
-    if foodOnly then
-        text = text .. " (food only for this class)"
+    local water, food, relation, class = self:GetAmounts()
+    local who = relation:sub(1, 1):upper() .. relation:sub(2)
+    if class then
+        who = who .. ", " .. self:ClassName(class)
     end
-    return text
+    local _, level = Partner()
+    if level then
+        who = who .. " (level " .. level .. ")"
+    end
+    return who .. ": " .. water .. " water, " .. food .. " food"
 end
 
 -------------------------------------------------------------------------------

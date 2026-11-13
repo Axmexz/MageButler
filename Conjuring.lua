@@ -12,6 +12,15 @@ local WATER = { 5350, 2288, 2136, 3772, 8077, 8078, 8079, 30703, 22018 }
 local FOOD = { 5349, 1113, 1114, 1487, 8075, 8076, 22895, 22019 }
 local SHARED = { 34062 } -- Conjured Manna Biscuit restores both
 
+-- Level needed to eat or drink each one, used when the client has not cached
+-- the item yet.
+local MIN_LEVEL = {
+    [5350] = 1, [2288] = 5, [2136] = 15, [3772] = 25, [8077] = 35, [8078] = 45, [8079] = 55,
+    [30703] = 60, [22018] = 65,
+    [5349] = 1, [1113] = 5, [1114] = 15, [1487] = 25, [8075] = 35, [8076] = 45, [22895] = 55,
+    [22019] = 65, [34062] = 65,
+}
+
 local FALLBACK_SPELL = { water = 5504, food = 587, gem = 759 }
 local LABEL = { water = "water", food = "food" }
 
@@ -85,6 +94,12 @@ end
 --- "water", "food" or "both" for conjured consumables; nil for anything else.
 function Conjuring:KindOf(itemID)
     return kindOf[itemID]
+end
+
+--- Character level needed to use a conjured item (the client's own figure
+--- when it has one).
+function Conjuring:MinLevel(itemID)
+    return API.ItemMinLevel(itemID) or MIN_LEVEL[itemID] or 1
 end
 
 --- Conjured items of a kind, best first, for the trade assistant.

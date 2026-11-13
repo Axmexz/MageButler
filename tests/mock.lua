@@ -270,6 +270,13 @@ function SetAura(unit, spellId, secondsLeft)
         expirationTime = secondsLeft and (M.time + secondsLeft) or 0 }
 end
 
+LOCALIZED_CLASS_NAMES_MALE = { WARRIOR = "Warrior", ROGUE = "Rogue", HUNTER = "Hunter", PALADIN = "Paladin",
+    SHAMAN = "Shaman", DRUID = "Druid", PRIEST = "Priest", MAGE = "Mage", WARLOCK = "Warlock" }
+RAID_CLASS_COLORS = { WARRIOR = { r = 0.78, g = 0.61, b = 0.43 } }
+function UnitLevel(unit)
+    if unit == "NPC" then return M.partnerLevel end
+    return 60
+end
 function UnitClass(unit)
     if unit == "NPC" then return M.partnerClass, M.partnerClass end
     local entry = M.roster[unit or "player"]
@@ -542,8 +549,9 @@ function C_Item.GetItemCount(id)
     end
     return total
 end
+local ITEM_MIN_LEVEL = { [8079] = 55, [8078] = 45, [3772] = 25, [8076] = 45, [1487] = 25 }
 function C_Item.GetItemInfo(id)
-    return "Item" .. id, "link", 1, 1, 1, "Type", "Sub", MaxStack(id)
+    return "Item" .. id, "link", 1, 1, ITEM_MIN_LEVEL[id] or 1, "Type", "Sub", MaxStack(id)
 end
 function C_Item.GetItemIconByID(id) return 134400 end
 function C_Item.RequestLoadItemDataByID() end

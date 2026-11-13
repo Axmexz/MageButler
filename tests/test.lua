@@ -27,6 +27,15 @@ local function phase(name, fn)
     end
 end
 
+local function RemoveItem(id)
+    for bag = 0, 4 do
+        for slot = 1, 16 do
+            local item = M.bags[bag][slot]
+            if item and item.id == id then M.bags[bag][slot] = nil end
+        end
+    end
+end
+
 local MB = {}
 
 -- Load the addon files in TOC order, the way the client does.
@@ -198,14 +207,18 @@ phase("trade: speed", function()
 end)
 
 phase("trade: class aware", function()
+    -- Enough food in the bags for the two stacks a Warrior is given.
+    AddStack(8076, 20)
+    FireEvent("BAG_UPDATE_DELAYED")
+
     M.partnerClass = "WARRIOR"
     OpenTrade("party")
     RunTimers()
     local totals, slots = TradeTotals()
     eq("warrior gets no water", totals[8079], nil)
-    eq("warrior gets food", totals[8076], 20)
-    eq("warrior: one slot", slots, 1)
-    check("preset text mentions food only", MB.Trade:DescribePreset():find("food only", 1, true) ~= nil)
+    eq("warrior gets food", totals[8076], 40)
+    eq("warrior: two slots", slots, 2)
+    eq("description names relation and class", MB.Trade:DescribePreset(), "Party, Warrior: 0 water, 40 food")
     CloseTradeWindow()
 
     M.partnerClass = "ROGUE"
@@ -220,19 +233,142 @@ phase("trade: class aware", function()
     eq("priest gets water", (TradeTotals())[8079], 40)
     CloseTradeWindow()
 
+    -- Standard numbers.
+    local amounts = MB.db.trade.amounts
+    eq("standard: party priest water", amounts.party.PRIEST.water, 40)
+    eq("standard: party hunter water", amounts.party.HUNTER.water, 40)
+    eq("standard: party mage water", amounts.party.MAGE.water, 40)
+    eq("standard: party rogue food", amounts.party.ROGUE.food, 40)
+    eq("standard: raid matches party", amounts.raid.PRIEST.food, amounts.party.PRIEST.food)
+    eq("standard: raid priest water", amounts.raid.PRIEST.water, 40)
+    eq("standard: raid warrior food", amounts.raid.WARRIOR.food, 40)
+    eq("standard: raid warrior water", amounts.raid.WARRIOR.water, 0)
+    eq("standard: other warlock", amounts.other.WARLOCK.water, 20)
+
+    -- Each class has its own plain numbers, per kind of trade partner.
     M.partnerClass = "WARRIOR"
-    MB.db.trade.classAware = false
+    amounts.party.WARRIOR.water = 20
     OpenTrade("party")
     RunTimers()
-    eq("class awareness off: water for all", (TradeTotals())[8079], 40)
+    eq("warrior given a number: water", (TradeTotals())[8079], 20)
     CloseTradeWindow()
-    MB.db.trade.classAware = true
+    amounts.party.WARRIOR.water = 0
+
+    M.partnerClass = "PRIEST"
+    amounts.party.PRIEST.water = 7
+    amounts.party.PRIEST.food = 0
+    OpenTrade("party")
+    RunTimers()
+    local priestTotals, priestSlots = TradeTotals()
+    eq("priest exact number", priestTotals[8079], 7)
+    eq("priest no food", priestTotals[8076], nil)
+    eq("priest: one slot", priestSlots, 1)
+    CloseTradeWindow()
+
+    OpenTrade("raid")
+    RunTimers()
+    eq("raid uses its own table, not the edited party one", (TradeTotals())[8079], 40)
+    eq("raid priest food", (TradeTotals())[8076], 20)
+    eq("raid description", MB.Trade:DescribePreset(), "Raid, Priest: 40 water, 20 food")
+    CloseTradeWindow()
+
+    M.partnerClass = "MAGE"
+    amounts.party.MAGE.water = 0
+    amounts.party.MAGE.food = 0
+    OpenTrade("party")
+    RunTimers()
+    eq("class set to zero: nothing offered", select(2, TradeTotals()), 0)
+    CloseTradeWindow()
     M.partnerClass = nil
+
+    MB.Config:ResetTradeAmounts()
+    eq("standard numbers restored", MB.db.trade.amounts.party.PRIEST.water, 40)
+    eq("standard numbers restored (mage)", MB.db.trade.amounts.party.MAGE.food, 20)
+
+    -- Older saved settings: three presets plus a per-class scale.
+    local trade = MB.db.trade
+    trade.amounts = nil
+    trade.presets = { party = { water = 40, food = 20 }, raid = { water = 20, food = 0 }, other = { water = 20, food = 20 } }
+    trade.classes = { WARRIOR = { water = 0, food = 1 }, PRIEST = { water = 1, food = 1 } }
+    MB.Config:Init()
+    eq("untouched old settings: standard numbers", MB.db.trade.amounts.raid.PRIEST.water, 40)
+    eq("old keys removed", MB.db.trade.presets, nil)
+
+    trade = MB.db.trade
+    trade.amounts = nil
+    trade.presets = { party = { water = 60, food = 10 }, raid = { water = 20, food = 0 }, other = { water = 20, food = 20 } }
+    trade.classes = { WARRIOR = { water = 0, food = 1 }, PRIEST = { water = 0.5, food = 1 } }
+    MB.Config:Init()
+    local migrated = MB.db.trade.amounts
+    eq("changed old settings kept: priest water", migrated.party.PRIEST.water, 30)
+    eq("changed old settings kept: priest food", migrated.party.PRIEST.food, 10)
+    eq("changed old settings kept: warrior", migrated.party.WARRIOR.water, 0)
+    eq("changed old settings kept: unknown class", migrated.party.UNKNOWN.water, 60)
+    eq("changed old settings kept: raid priest", migrated.raid.PRIEST.water, 10)
+    eq("changed old settings kept: druid", migrated.party.DRUID.water, 60)
+    eq("old class scale removed", MB.db.trade.classes, nil)
+    MB.Config:ResetTradeAmounts()
+
+    -- Put the bags back as the later phases expect them.
+    RemoveItem(8076)
+    AddStack(8076, 20)
+    AddStack(8076, 5)
+    FireEvent("BAG_UPDATE_DELAYED")
+    eq("bags restored", MB.API.ItemCount(8076), 25)
+end)
+
+phase("trade: ranks the player can use", function()
+    -- Bags hold rank 7 water (level 55) and rank 6 food (level 45).
+    M.partnerLevel = 30
+    OpenTrade("party")
+    RunTimers()
+    eq("level 30: nothing usable, nothing offered", select(2, TradeTotals()), 0)
+    CloseTradeWindow()
+
+    AddStack(3772, 20) -- level 25 water
+    AddStack(1487, 20) -- level 25 food
+    FireEvent("BAG_UPDATE_DELAYED")
+    OpenTrade("party")
+    RunTimers()
+    local totals = TradeTotals()
+    eq("level 30: lower rank water offered", totals[3772], 20)
+    eq("level 30: lower rank food offered", totals[1487], 20)
+    eq("level 30: high rank water kept", totals[8079], nil)
+    CloseTradeWindow()
+
+    M.partnerLevel = 60
+    OpenTrade("party")
+    RunTimers()
+    eq("level 60: best rank first", (TradeTotals())[8079], 40)
+    CloseTradeWindow()
+
+    M.partnerLevel = 30
+    MB.db.trade.usableOnly = false
+    OpenTrade("party")
+    RunTimers()
+    eq("option off: best rank regardless", (TradeTotals())[8079], 40)
+    CloseTradeWindow()
+    MB.db.trade.usableOnly = true
+
+    M.partnerLevel = nil
+    OpenTrade("party")
+    RunTimers()
+    eq("level unknown: best rank", (TradeTotals())[8079], 40)
+    CloseTradeWindow()
+
+    -- Put the bags back the way the later phases expect them.
+    for bag = 0, 4 do
+        for slot = 1, 16 do
+            local item = M.bags[bag][slot]
+            if item and (item.id == 3772 or item.id == 1487) then M.bags[bag][slot] = nil end
+        end
+    end
+    FireEvent("BAG_UPDATE_DELAYED")
 end)
 
 phase("trade: partial stacks", function()
-    MB.db.trade.presets.other.water = 10
-    MB.db.trade.presets.other.food = 3
+    MB.db.trade.amounts.other.UNKNOWN.water = 10
+    MB.db.trade.amounts.other.UNKNOWN.food = 3
     OpenTrade(nil)
     RunTimers()
     local totals, slots = TradeTotals()
@@ -262,20 +398,20 @@ phase("trade: pre-filled slot is not overwritten", function()
     RunTimers()
     eq("slot 1 untouched", M.trade[1].id, 6948)
     local totals = TradeTotals()
-    eq("raid water", totals[8079], 20)
-    eq("raid food", totals[8076], nil)
+    eq("raid water", totals[8079], 40)
+    eq("raid food", totals[8076], 20)
     CloseTradeWindow()
 end)
 
 phase("trade: not enough stock", function()
-    MB.db.trade.presets.party.water = 100
+    MB.db.trade.amounts.party.UNKNOWN.water = 100
     OpenTrade("party")
     RunTimers()
     local totals = TradeTotals()
     eq("offers what exists", totals[8079], 47)
     eq("still offers food", totals[8076], 20)
     CloseTradeWindow()
-    MB.db.trade.presets.party.water = 40
+    MB.db.trade.amounts.party.UNKNOWN.water = 40
 end)
 
 phase("trade: manual fill and blocked automation", function()
@@ -309,15 +445,6 @@ phase("trade: manual fill and blocked automation", function()
     MB.Trade:RetryAutomatic()
     check("retry clears block", not MB.Trade:IsAutoBlocked())
 end)
-
-local function RemoveItem(id)
-    for bag = 0, 4 do
-        for slot = 1, 16 do
-            local item = M.bags[bag][slot]
-            if item and item.id == id then M.bags[bag][slot] = nil end
-        end
-    end
-end
 
 local function Orb(attribute)
     return MageButlerOrb:GetAttribute(attribute)
@@ -729,7 +856,7 @@ phase("slash commands and profiles", function()
     eq("other profiles", #MB.Config:GetOtherProfiles(), 1)
     check("copy works", MB.Config:CopyFrom("Alt - TestRealm"))
     eq("copied value", MB.db.radial.radius, 64)
-    eq("defaults filled in", MB.db.trade.presets.party.water, 40)
+    eq("defaults filled in", MB.db.trade.amounts.party.PRIEST.water, 40)
     eq("orb scale applied", MageButlerOrb:GetScale(), 1.25)
     MB.Config:Reset()
     eq("reset value", MB.db.radial.radius, 78)

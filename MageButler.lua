@@ -203,6 +203,13 @@ function API.ItemStackSize(itemID)
     return nil
 end
 
+--- Character level needed to use an item, or nil while the item is not cached.
+function API.ItemMinLevel(itemID)
+    if not rawItemInfo then return nil end
+    local _, _, _, _, minLevel = rawItemInfo(itemID)
+    return API.Num(minLevel)
+end
+
 function API.ItemIcon(itemID)
     if not rawItemIcon then return nil end
     local icon = rawItemIcon(itemID)

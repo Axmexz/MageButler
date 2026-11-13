@@ -6,6 +6,13 @@
 local _, MB = ...
 local Config = MB:NewModule("Config")
 
+-- Classes with their own row in the trade settings, in display order.
+Config.CLASSES = { "WARRIOR", "ROGUE", "HUNTER", "PALADIN", "SHAMAN", "DRUID", "PRIEST", "MAGE", "WARLOCK" }
+
+local function Row(water, food)
+    return { water = water, food = food }
+end
+
 Config.defaults = {
     general = {
         enabled = true,
@@ -49,12 +56,32 @@ Config.defaults = {
     trade = {
         enabled = true,
         showFillButton = true,
-        classAware = true,
+        usableOnly = true,
         blockedBuild = "",
-        presets = {
-            party = { water = 40, food = 20 },
-            raid = { water = 20, food = 0 },
-            other = { water = 20, food = 20 },
+        -- Items of water and food to offer, by who the player is to you and by
+        -- their class (20 is one full stack). Standard numbers: two stacks of
+        -- food and no water for the classes without mana, two stacks of water
+        -- and one of food for everyone else. UNKNOWN is used when the client
+        -- does not report the class.
+        amounts = {
+            party = {
+                WARRIOR = Row(0, 40), ROGUE = Row(0, 40), HUNTER = Row(40, 20),
+                PALADIN = Row(40, 20), SHAMAN = Row(40, 20), DRUID = Row(40, 20),
+                PRIEST = Row(40, 20), MAGE = Row(40, 20), WARLOCK = Row(40, 20),
+                UNKNOWN = Row(40, 20),
+            },
+            raid = {
+                WARRIOR = Row(0, 40), ROGUE = Row(0, 40), HUNTER = Row(40, 20),
+                PALADIN = Row(40, 20), SHAMAN = Row(40, 20), DRUID = Row(40, 20),
+                PRIEST = Row(40, 20), MAGE = Row(40, 20), WARLOCK = Row(40, 20),
+                UNKNOWN = Row(40, 20),
+            },
+            other = {
+                WARRIOR = Row(0, 20), ROGUE = Row(0, 20), HUNTER = Row(20, 20),
+                PALADIN = Row(20, 20), SHAMAN = Row(20, 20), DRUID = Row(20, 20),
+                PRIEST = Row(20, 20), MAGE = Row(20, 20), WARLOCK = Row(20, 20),
+                UNKNOWN = Row(20, 20),
+            },
         },
     },
     buffwatch = {
@@ -136,6 +163,61 @@ local function ApplyDefaults(target, defaults)
     return target
 end
 
+--- Earlier versions stored trade amounts as three presets (party, raid, other)
+--- plus a per-class scale. A profile that changed those keeps its numbers,
+--- worked out into the per-class table; an untouched one gets the standard
+--- numbers. The old keys are removed either way.
+local function MigrateTrade(profile)
+    local trade = profile.trade
+    if type(trade) ~= "table" then return end
+    local presets, classes = trade.presets, trade.classes
+
+    if type(presets) == "table" and type(trade.amounts) ~= "table" then
+        local oldPresets = { party = Row(40, 20), raid = Row(20, 0), other = Row(20, 20) }
+        local function Scale(class)
+            local scale = type(classes) == "table" and classes[class] or nil
+            local water = (class == "WARRIOR" or class == "ROGUE") and 0 or 1
+            local food = 1
+            local changed = false
+            if type(scale) == "table" then
+                if type(scale.water) == "number" and scale.water ~= water then water, changed = scale.water, true end
+                if type(scale.food) == "number" and scale.food ~= food then food, changed = scale.food, true end
+            end
+            if trade.classAware == false and water == 0 then water, changed = 1, true end
+            return water, food, changed
+        end
+
+        local customised = false
+        for relation, old in pairs(oldPresets) do
+            local preset = presets[relation]
+            if type(preset) ~= "table" or preset.water ~= old.water or preset.food ~= old.food then
+                customised = true
+            end
+        end
+        for _, class in ipairs(Config.CLASSES) do
+            local _, _, changed = Scale(class)
+            if changed then customised = true end
+        end
+
+        if customised then
+            local amounts = {}
+            for relation, old in pairs(oldPresets) do
+                local preset = presets[relation]
+                local water = type(preset) == "table" and type(preset.water) == "number" and preset.water or old.water
+                local food = type(preset) == "table" and type(preset.food) == "number" and preset.food or old.food
+                amounts[relation] = { UNKNOWN = Row(water, food) }
+                for _, class in ipairs(Config.CLASSES) do
+                    local waterScale, foodScale = Scale(class)
+                    amounts[relation][class] = Row(math.floor(water * waterScale + 0.5), math.floor(food * foodScale + 0.5))
+                end
+            end
+            trade.amounts = amounts
+        end
+    end
+
+    trade.presets, trade.classes, trade.classAware = nil, nil, nil
+end
+
 function Config:Init()
     if type(MageButlerDB) ~= "table" then
         MageButlerDB = {}
@@ -152,7 +234,13 @@ function Config:Init()
     if type(root.chars[self.key]) ~= "table" then
         root.chars[self.key] = {}
     end
+    MigrateTrade(root.chars[self.key])
     MB.db = ApplyDefaults(root.chars[self.key], self.defaults)
+end
+
+function Config:ResetTradeAmounts()
+    MB.db.trade.amounts = DeepCopy(self.defaults.trade.amounts)
+    MB:Fire("SETTINGS_CHANGED", "trade")
 end
 
 --- Names of the other characters that have a stored profile.
@@ -171,6 +259,7 @@ function Config:CopyFrom(key)
     local source = self.root.chars[key]
     if type(source) ~= "table" or key == self.key then return false end
     local copy = DeepCopy(source)
+    MigrateTrade(copy)
     self.root.chars[self.key] = copy
     MB.db = ApplyDefaults(copy, self.defaults)
     MB:Fire("SETTINGS_CHANGED", "all")

@@ -79,6 +79,18 @@ local function Note(page, y, text)
     return label
 end
 
+--- A container for everything that follows a wrapped note, anchored under it
+--- rather than at a fixed offset. How many lines a note wraps to depends on
+--- the font and the language, so a fixed offset is what makes text overlap.
+--- Positions inside the section are measured from its own top.
+local function SectionBelow(page, region, gap)
+    local section = CreateFrame("Frame", nil, page)
+    section:SetPoint("TOPLEFT", region, "BOTTOMLEFT", 0, -(gap or 20))
+    section:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+    section:SetHeight(1)
+    return section
+end
+
 local function Checkbox(page, x, y, text, tooltip, get, set)
     local check = CreateFrame("CheckButton", nil, page, "BackdropTemplate")
     check:SetSize(18, 18)
@@ -553,9 +565,11 @@ builders.conjuring = function(page)
     Checkbox(page, COLUMN, -64, "Warn when supplies run out", "A short notification the moment your last conjured water or food is gone.",
         Field("conjuring", conjuring, "warnMissing"))
 
-    Note(page, -94, "The radial buttons cast the highest rank you have learned, found in your spellbook. The Mana Gem button conjures the strongest gem you are not carrying; right-click uses your best gem. MageButler never casts on its own.")
+    local note = Note(page, -94, "The radial buttons cast the highest rank you have learned, found in your spellbook. The Mana Gem button conjures the strongest gem you are not carrying; right-click uses your best gem. MageButler never casts on its own.")
 
-    Header(page, -150, "HUD Counters")
+    -- Anchored under the note, so the heading cannot land on top of it.
+    local hud = SectionBelow(page, note, 22)
+    Header(hud, 0, "HUD Counters")
     local names = {
         { "food", "Food" }, { "water", "Water" }, { "gem", "Mana Gem" },
         { "runeT", "Rune of Teleportation" }, { "runeP", "Rune of Portals" }, { "powder", "Arcane Powder" },
@@ -564,7 +578,7 @@ builders.conjuring = function(page)
     for i = 1, #names do
         local column = (i - 1) % 2
         local row = math.floor((i - 1) / 2)
-        Checkbox(page, column * COLUMN, -178 - row * 24, names[i][2], "Shows this counter on the HUD.",
+        Checkbox(hud, column * COLUMN, -30 - row * 24, names[i][2], "Shows this counter on the HUD.",
             Field("conjuring", cells, names[i][1]))
     end
 end
@@ -583,27 +597,57 @@ builders.trading = function(page)
         end)
     Checkbox(page, COLUMN, -28, "Show Fill Trade button", "Adds a Fill Trade button above the trade window for filling by hand.",
         Field("trade", trade, "showFillButton"))
-    Checkbox(page, 0, -52, "Food only for Warriors and Rogues",
-        "Classes without mana get the preset's food but no water.",
-        Field("trade", trade, "classAware"))
+    Checkbox(page, 0, -52, "Match the player's level",
+        "Offers the best rank the other player is high enough to eat or drink. Ranks above their level are left in your bags.",
+        Field("trade", trade, "usableOnly"))
 
-    Label(page, 0, -88, "Trading with", 10, "dim")
-    Label(page, 150, -88, "Water", 10, "dim")
-    Label(page, 220, -88, "Food", 10, "dim")
+    -- One table of plain numbers per class; the selector picks whose table
+    -- is shown: party members, raid members or everyone else.
+    local selected = "party"
+    Label(page, 0, -90, "Amounts for", 12)
+    Cycle(page, 92, -86, 130, "Amounts for",
+        "Which set of numbers the table below shows and edits. Each kind of trade partner has its own.",
+        { { "party", "Party members" }, { "raid", "Raid members" }, { "other", "Other players" } },
+        function() return selected end,
+        function(value)
+            selected = value
+            Changed("trade") -- redraws the table for the new selection
+        end)
+    PanelButton(page, 232, -86, "Standard numbers", 130,
+        "Puts every number in all three tables back to MageButler's standard amounts.", function()
+            MB.Config:ResetTradeAmounts()
+        end)
 
-    local presets = { { "party", "Party members" }, { "raid", "Raid members" }, { "other", "Other players" } }
-    for i = 1, #presets do
-        local key, text = presets[i][1], presets[i][2]
-        local y = -108 - (i - 1) * 28
-        local function preset() return MB.db.trade.presets[key] end
-        Label(page, 0, y - 4, text, 12)
-        NumberBox(page, 150, y, 52, text .. ": water", "Items of conjured water to offer (20 is one full stack). 0 offers none.", 0, 120,
-            Field("trade", preset, "water"))
-        NumberBox(page, 220, y, 52, text .. ": food", "Items of conjured food to offer (20 is one full stack). 0 offers none.", 0, 120,
-            Field("trade", preset, "food"))
+    local classColors = _G.RAID_CLASS_COLORS
+    local classes = MB.Trade.CLASSES
+    local perColumn = math.ceil(#classes / 2)
+    for column = 0, 1 do
+        local x = column * 222
+        Label(page, x, -118, "Class", 10, "dim")
+        Label(page, x + 96, -118, "Water", 10, "dim")
+        Label(page, x + 146, -118, "Food", 10, "dim")
+    end
+    for i, class in ipairs(classes) do
+        local column = (i > perColumn) and 1 or 0
+        local x = column * 222
+        local y = -136 - ((i - 1) % perColumn) * 24
+        local function row() return MB.db.trade.amounts[selected][class] end
+        local name = MB.Trade:ClassName(class)
+
+        local label = Label(page, x, y - 4, name, 12)
+        local colour = classColors and classColors[class]
+        if colour and colour.r then
+            label:SetTextColor(colour.r, colour.g, colour.b)
+        end
+        NumberBox(page, x + 96, y, 44, name .. ": water",
+            "Items of conjured water to offer a " .. name .. " (20 is one full stack). 0 offers none.", 0, 120,
+            Field("trade", row, "water"))
+        NumberBox(page, x + 146, y, 44, name .. ": food",
+            "Items of conjured food to offer a " .. name .. " (20 is one full stack). 0 offers none.", 0, 120,
+            Field("trade", row, "food"))
     end
 
-    local status = Label(page, 0, -200, "", 11)
+    local status = Label(page, 0, -264, "", 11)
     status:SetWidth(PAGE_WIDTH)
     status:SetWordWrap(true)
     refreshers[#refreshers + 1] = function()
@@ -614,7 +658,7 @@ builders.trading = function(page)
         end
     end
 
-    Note(page, -244, "Only conjured water and food are ever offered, only into empty trade slots, and only once per trade. MageButler never accepts a trade for you. A trade window has six slots, so at most six stacks fit.")
+    Note(page, -304, "Numbers are items, not stacks. Only conjured water and food are ever offered, only into empty trade slots, and only once per trade. MageButler never accepts a trade for you. A trade window has six slots, so at most six stacks fit.")
 end
 
 builders.appearance = function(page)

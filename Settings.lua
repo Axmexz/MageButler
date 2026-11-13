@@ -670,7 +670,7 @@ builders.trading = function(page)
         end
     end
 
-    Note(page, -304, "Numbers are items, not stacks. Only conjured water and food are ever offered, only into empty trade slots, and only once per trade. MageButler never accepts a trade for you. A trade window has six slots, so at most six stacks fit.")
+    Note(page, -304, "Numbers are items, not stacks. Only the strongest rank you carry is handed over, so older leftovers stay in your bags. Only conjured water and food are ever offered, only into empty trade slots, and only once per trade. MageButler never accepts a trade for you. A trade window has six slots, so at most six stacks fit.")
 end
 
 builders.appearance = function(page)

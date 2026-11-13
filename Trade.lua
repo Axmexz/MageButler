@@ -108,42 +108,56 @@ end
 -------------------------------------------------------------------------------
 -- Bag search
 -------------------------------------------------------------------------------
---- Finds the bag stack to offer next. Prefers the best item rank the partner
---- can use, then one stack that covers the whole amount (smallest that does),
---- then the largest stack. Returns bag, slot, itemID, stackCount - or nil,
---- whether a suitable stack exists but is locked right now, and whether the
---- only stacks left are above the partner's level.
-local function FindSource(kind, need, maxLevel)
-    local locked, tooHigh = false, false
+--- The one rank to hand over: the strongest carried that the partner's level
+--- can use. Only that rank is offered, so what is traded is what the counters
+--- say you have. Also reports whether a rank was passed over as too strong
+--- for the partner.
+local function ChooseRank(kind, maxLevel)
     local items = MB.Conjuring:ItemsBestFirst(kind)
+    local tooHigh = false
     for i = 1, #items do
-        local wanted = items[i]
-        if API.ItemCount(wanted) > 0 and maxLevel and MB.Conjuring:MinLevel(wanted) > maxLevel then
-            tooHigh = true
-        elseif API.ItemCount(wanted) > 0 then
-            local coverBag, coverSlot, coverCount
-            local bigBag, bigSlot, bigCount
-            for bag = 0, MB.LAST_BAG do
-                for slot = 1, API.BagSlots(bag) do
-                    local itemID, count, isLocked = API.BagItem(bag, slot)
-                    if itemID == wanted then
-                        if isLocked then
-                            locked = true
-                        else
-                            if count >= need and (not coverCount or count < coverCount) then
-                                coverBag, coverSlot, coverCount = bag, slot, count
-                            end
-                            if not bigCount or count > bigCount then
-                                bigBag, bigSlot, bigCount = bag, slot, count
-                            end
-                        end
+        local itemID = items[i]
+        if API.ItemCount(itemID) > 0 then
+            if maxLevel and MB.Conjuring:MinLevel(itemID) > maxLevel then
+                tooHigh = true
+            else
+                return itemID, tooHigh
+            end
+        end
+    end
+    return nil, tooHigh
+end
+
+--- Finds the bag stack to offer next, from that one rank: a stack that covers
+--- the whole amount (the smallest that does), otherwise the largest. Returns
+--- bag, slot, itemID, stackCount - or nil, whether a stack exists but is
+--- locked right now, and whether everything carried is too strong for them.
+local function FindSource(kind, need, maxLevel)
+    local wanted, tooHigh = ChooseRank(kind, maxLevel)
+    if not wanted then return nil, false, tooHigh end
+
+    local locked = false
+    local coverBag, coverSlot, coverCount
+    local bigBag, bigSlot, bigCount
+    for bag = 0, MB.LAST_BAG do
+        for slot = 1, API.BagSlots(bag) do
+            local itemID, count, isLocked = API.BagItem(bag, slot)
+            if itemID == wanted then
+                if isLocked then
+                    locked = true
+                else
+                    if count >= need and (not coverCount or count < coverCount) then
+                        coverBag, coverSlot, coverCount = bag, slot, count
+                    end
+                    if not bigCount or count > bigCount then
+                        bigBag, bigSlot, bigCount = bag, slot, count
                     end
                 end
             end
-            if coverBag then return coverBag, coverSlot, wanted, coverCount end
-            if bigBag then return bigBag, bigSlot, wanted, bigCount end
         end
     end
+    if coverBag then return coverBag, coverSlot, wanted, coverCount end
+    if bigBag then return bigBag, bigSlot, wanted, bigCount end
     return nil, locked, tooHigh
 end
 

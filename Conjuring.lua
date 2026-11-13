@@ -36,28 +36,30 @@ local lastState = {}
 -------------------------------------------------------------------------------
 -- Inventory
 -------------------------------------------------------------------------------
-local function CountList(list)
-    local total, best = 0, nil
-    for i = 1, #list do
+--- How many of the strongest rank carried, and which rank that is. Lists run
+--- weakest first. Leftovers of an older rank are not counted: a handful of
+--- Rank 4 water is not the same as having that much of Rank 7, and treating
+--- it as the same made the counts, the HUD and the preparation check claim
+--- more than the player really had.
+local function CountBest(list)
+    for i = #list, 1, -1 do
         local n = API.ItemCount(list[i])
-        if n > 0 then
-            total = total + n
-            best = list[i]
-        end
+        if n > 0 then return n, list[i] end
     end
-    return total, best
+    return 0, nil
 end
 
 function Conjuring:RefreshInventory()
-    local shared, sharedBest = CountList(SHARED)
-    local water, waterBest = CountList(WATER)
-    local food, foodBest = CountList(FOOD)
+    local shared, sharedBest = CountBest(SHARED)
+    local water, waterBest = CountBest(WATER)
+    local food, foodBest = CountBest(FOOD)
 
     counts.water = water + shared
     counts.food = food + shared
     bestItem.water = waterBest or sharedBest
     bestItem.food = foodBest or sharedBest
 
+    -- Gems are each used for their own cooldown, so every one of them counts.
     local gems, gemBest = 0, nil
     for i = 1, #MB.Spells.GEMS do
         local itemID = MB.Spells.GEMS[i].item

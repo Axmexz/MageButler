@@ -113,6 +113,17 @@ local function CreateOrb()
     orb.ring:SetPoint("BOTTOMRIGHT", 1, -1)
     Theme:UseAccent(orb.ring, "SetVertexColor", 1)
 
+    -- Lit briefly whenever the orb or one of its buttons is clicked. It sits
+    -- at the centre, where the glow has room to spread without washing over
+    -- the ring of a neighbouring button.
+    orb.flash = orb:CreateTexture(nil, "OVERLAY", nil, -1)
+    orb.flash:SetTexture(MB.MEDIA .. "Glow.tga")
+    orb.flash:SetBlendMode("ADD")
+    orb.flash:SetPoint("TOPLEFT", -14, 14)
+    orb.flash:SetPoint("BOTTOMRIGHT", 14, -14)
+    orb.flash:SetAlpha(0)
+    Theme:UseAccent(orb.flash, "SetVertexColor", 1)
+
     orb.hover = orb:CreateTexture(nil, "HIGHLIGHT")
     orb.hover:SetTexture(MB.MEDIA .. "Glow.tga")
     orb.hover:SetBlendMode("ADD")
@@ -136,8 +147,9 @@ local function CreateOrb()
             MB.BuffWatch:PrepareClick()
         end
     end)
-    orb:SetScript("PostClick", function(_, button, down)
+    orb:SetScript("PostClick", function(self, button, down)
         if down then return end
+        Theme:Flash(self.flash)
         if button == "RightButton" then
             if IsShiftKeyDown() then
                 MB.Settings:Toggle()
@@ -238,10 +250,12 @@ local function CreateRoundButton(key, template)
     button:HookScript("OnLeave", function()
         GameTooltip:Hide()
     end)
-    -- Both click phases arrive here; light up on the one that acts.
+    -- Both click phases arrive here; light up on the one that acts. The glow
+    -- goes on the orb at the centre; only the ring of the button itself
+    -- brightens, so nothing spills over a neighbour.
     button:HookScript("PostClick", function(self, _, down)
         if not down then
-            Theme:Flash(self.flash, self.ring, Radial.RestoreRings)
+            Theme:Flash(orb.flash, self.ring, Radial.RestoreRings)
         end
     end)
 

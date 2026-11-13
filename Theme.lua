@@ -173,15 +173,6 @@ function Theme:SkinRound(button)
     button.ring:SetPoint("BOTTOMRIGHT", 1, -1)
     button.ring:SetVertexColor(self:Color("border"))
 
-    -- Lit briefly when the button is clicked; see Theme:Flash.
-    button.flash = button:CreateTexture(nil, "OVERLAY", nil, -1)
-    button.flash:SetTexture(media .. "Glow.tga")
-    button.flash:SetBlendMode("ADD")
-    button.flash:SetPoint("TOPLEFT", -16, 16)
-    button.flash:SetPoint("BOTTOMRIGHT", 16, -16)
-    button.flash:SetAlpha(0)
-    self:UseAccent(button.flash, "SetVertexColor", 1)
-
     button.glow = button:CreateTexture(nil, "HIGHLIGHT")
     button.glow:SetTexture(media .. "Glow.tga")
     button.glow:SetBlendMode("ADD")
@@ -335,13 +326,17 @@ function Theme:PulseForState(state)
     return nil
 end
 
---- One soft swell of light and back, as feedback for a click. `ring`, where
---- given, brightens with it; `restore` is then called to put the ring back to
---- whatever colour it should be by then, which is not necessarily the colour
---- it had before the click.
+--- One soft swell of light and back, as feedback for a click. The glow is
+--- wider than whatever it sits on, so it belongs on something with room
+--- around it, not on a button with neighbours. `ring`, where given, brightens
+--- with it; `restore` is then called to put that ring back to whatever colour
+--- it should be by then, which need not be the colour it had before the click.
 function Theme:Flash(region, ring, restore)
     if not region then return end
     if MB.db and not MB.db.radial.animations then return end
+
+    -- A flash already running hands its ring back before this one takes over.
+    if region.mbFlashRestore then region.mbFlashRestore() end
 
     local group = region.mbFlash
     if not group then

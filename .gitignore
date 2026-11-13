@@ -1,7 +1,6 @@
-# Local Claude Code settings: machine-specific, may hold local paths.
-# .claude/launch.json is kept, so anyone can run the test harness.
-.claude/settings.local.json
-.claude/*.local.json
+# Claude Code's own folder: machine-specific, and nobody else's business.
+# launch.json lives here and still runs the test harness locally.
+.claude/
 
 # Local project notes: they record when the repository's protections lapse,
 # which is not something to publish.

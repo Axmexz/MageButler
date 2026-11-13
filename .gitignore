@@ -6,6 +6,10 @@
 # which is not something to publish.
 CLAUDE.md
 
+# The test harness stays local. It is a development tool, not part of the
+# addon, and it still runs from here.
+tests/
+
 # Windows and editor leftovers
 Thumbs.db
 desktop.ini

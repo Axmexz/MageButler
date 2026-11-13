@@ -1,0 +1,11 @@
+# Local Claude Code settings: machine-specific, may hold local paths.
+# .claude/launch.json is kept, so anyone can run the test harness.
+.claude/settings.local.json
+.claude/*.local.json
+
+# Windows and editor leftovers
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
+*~

@@ -3,9 +3,9 @@
 .claude/settings.local.json
 .claude/*.local.json
 
-# Local maintenance notes: they record when the repository's protections
-# lapse, which is not something to publish.
-MAINTENANCE.md
+# Local project notes: they record when the repository's protections lapse,
+# which is not something to publish.
+CLAUDE.md
 
 # Windows and editor leftovers
 Thumbs.db

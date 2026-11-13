@@ -71,7 +71,10 @@ phase("login", function()
     FireEvent("PLAYER_LOGIN")
     FireEvent("PLAYER_ENTERING_WORLD")
     FireEvent("SPELLS_CHANGED")
+    check("counts are not trusted before the bags answer", MB.inventoryReady == false)
+    eq("no count read during a loading screen", MB.Conjuring:Count("water"), 0)
     RunTimers()
+    check("counts trusted once the bags answer", MB.inventoryReady)
     check("ready", MB.ready)
     check("orb exists", MageButlerOrb ~= nil)
     check("orb shown", MageButlerOrb and MageButlerOrb:IsShown())
@@ -171,6 +174,48 @@ phase("reagent restock", function()
     MB.db.reagents.items.runeP.maxSpend = 5
     MB.db.reagents.items.powder.confirm = false
     FireEvent("BAG_UPDATE_DELAYED")
+end)
+
+-- Reported in game: taking a portal or a teleport produced "low on reagents"
+-- while the bags still held plenty. Right after a loading screen the client
+-- cannot answer questions about the bags, so every count reads zero.
+phase("a loading screen raises no false alarm", function()
+    local toasts = {}
+    local realToast = MB.Theme.Toast
+    MB.Theme.Toast = function(_, text) toasts[#toasts + 1] = text end
+
+    local runes = MB.Reagents:Count("runeT")
+    local water = MB.Conjuring:Count("water")
+    check("the bags hold reagents to begin with", runes > 0, runes)
+
+    M.bagsUnreadable = true
+    FireEvent("PLAYER_ENTERING_WORLD")
+    check("counts are frozen while the bags cannot answer", not MB.inventoryReady)
+    FireEvent("BAG_UPDATE_DELAYED") -- arrives before the bags can answer
+    RunFor(3)
+    eq("no warning raised", #toasts, 0)
+    eq("rune count kept", MB.Reagents:Count("runeT"), runes)
+    eq("water count kept", MB.Conjuring:Count("water"), water)
+    eq("nothing reported as missing", MB.Readiness:GetOverall(), "ok")
+
+    M.bagsUnreadable = false
+    FireEvent("BAG_UPDATE_DELAYED")
+    RunTimers()
+    check("counts trusted once the bags answer", MB.inventoryReady)
+    eq("still no warning", #toasts, 0)
+    eq("rune count correct", MB.Reagents:Count("runeT"), runes)
+
+    -- A real shortage still warns.
+    RemoveItem(17031)
+    FireEvent("BAG_UPDATE_DELAYED")
+    RunTimers()
+    check("a real shortage still warns", #toasts > 0, #toasts)
+    AddStack(17031, runes)
+    FireEvent("BAG_UPDATE_DELAYED")
+    RunTimers()
+    eq("bags restored", MB.Reagents:Count("runeT"), runes)
+
+    MB.Theme.Toast = realToast
 end)
 
 phase("trade: party preset, whole stacks", function()

@@ -480,8 +480,14 @@ function AddStack(id, count)
 end
 
 C_Container = {}
-function C_Container.GetContainerNumSlots() return 16 end
+-- M.bagsUnreadable models the window right after a loading screen, when the
+-- client cannot answer questions about the bags: no slots, no items, no counts.
+function C_Container.GetContainerNumSlots()
+    if M.bagsUnreadable then return 0 end
+    return 16
+end
 function C_Container.GetContainerItemInfo(bag, slot)
+    if M.bagsUnreadable then return nil end
     local item = M.bags[bag] and M.bags[bag][slot]
     if not item then return nil end
     return { itemID = item.id, stackCount = item.count, isLocked = item.locked }
@@ -540,6 +546,7 @@ end
 
 C_Item = {}
 function C_Item.GetItemCount(id)
+    if M.bagsUnreadable then return 0 end
     local total = 0
     for bag = 0, 4 do
         for slot = 1, 16 do

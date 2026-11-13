@@ -277,12 +277,16 @@ function Readiness:OnEnable()
         local entered = inside and not wasInInstance
         wasInInstance = inside
         if not entered then return end
-        C_Timer.After(3, function()
-            if not (MB:IsActive() and MB.db.readiness.enabled and MB.db.readiness.onInstance) then return end
-            Evaluate()
-            if overall == "low" or overall == "none" then
-                Readiness:Report(false)
-            end
+        -- Only once the bags answer again: straight after a loading screen
+        -- every count reads zero.
+        MB:AfterInventory(function()
+            C_Timer.After(3, function()
+                if not (MB:IsActive() and MB.db.readiness.enabled and MB.db.readiness.onInstance) then return end
+                Evaluate()
+                if overall == "low" or overall == "none" then
+                    Readiness:Report(false)
+                end
+            end)
         end)
     end)
 end

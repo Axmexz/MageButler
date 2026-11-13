@@ -287,9 +287,32 @@ end
 
 -------------------------------------------------------------------------------
 -- Inventory snapshot: one refresh per bag-update batch, shared by all modules
+--
+-- A loading screen (a portal, a teleport, logging in) leaves the client unable
+-- to answer questions about the bags for a moment: every count reads zero.
+-- Taken at face value that looks like "you have run out of everything", so
+-- counts are frozen at their last known values until the bags answer again.
 -------------------------------------------------------------------------------
+local SETTLE_DELAY = 2.0   -- quiet period after a loading screen
+local SETTLE_STEP = 0.5    -- how often the bags are asked after that
+local SETTLE_TRIES = 16    -- give up waiting after this many asks
+
+MB.inventoryReady = false
+
+local settleToken = 0
+local inventoryWaiters = {}
+
+--- Runs fn now if the bag contents can be trusted, otherwise once they can.
+function MB:AfterInventory(fn)
+    if self.inventoryReady then
+        fn()
+        return
+    end
+    inventoryWaiters[#inventoryWaiters + 1] = fn
+end
+
 function MB:RefreshInventory()
-    if not self.ready then return end
+    if not self.ready or not self.inventoryReady then return end
     for i = 1, #self.modules do
         local module = self.modules[i]
         if module.RefreshInventory then
@@ -298,6 +321,38 @@ function MB:RefreshInventory()
     end
     self:Fire("INVENTORY_UPDATED")
 end
+
+local function MarkInventoryReady()
+    if MB.inventoryReady then return end
+    MB.inventoryReady = true
+    MB:RefreshInventory()
+
+    local waiters = inventoryWaiters
+    inventoryWaiters = {}
+    for i = 1, #waiters do
+        waiters[i]()
+    end
+end
+
+--- Asks the bags until they answer, then trusts them again.
+local function WaitForInventory(tries)
+    settleToken = settleToken + 1
+    local token = settleToken
+    C_Timer.After(tries == 0 and SETTLE_DELAY or SETTLE_STEP, function()
+        if token ~= settleToken then return end
+        -- The backpack always has slots once the client can answer at all.
+        if API.BagSlots(0) > 0 or tries >= SETTLE_TRIES then
+            MarkInventoryReady()
+        else
+            WaitForInventory(tries + 1)
+        end
+    end)
+end
+
+MB:RegisterEvent("PLAYER_ENTERING_WORLD", function()
+    MB.inventoryReady = false
+    WaitForInventory(0)
+end)
 
 -------------------------------------------------------------------------------
 -- Startup
@@ -321,7 +376,15 @@ MB:RegisterEvent("PLAYER_LOGIN", function()
     end
     MB.ready = true
 
+    -- The bags answering is the signal that the quiet period can end early.
     MB:RegisterEvent("BAG_UPDATE_DELAYED", function()
+        if not MB.inventoryReady then
+            if API.BagSlots(0) > 0 then
+                settleToken = settleToken + 1
+                MarkInventoryReady()
+            end
+            return
+        end
         MB:RefreshInventory()
     end)
 

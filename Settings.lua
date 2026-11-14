@@ -888,30 +888,27 @@ end
 -------------------------------------------------------------------------------
 local welcome
 local welcomeChecks = {}
-local WELCOME_HEIGHT = { 272, 300 }
+local WELCOME_HEIGHT = 444
 
 local function generalDB() return MB.db.general end
 local function readinessDB() return MB.db.readiness end
+local function prepDB() return MB.db.readiness.items end
 
---- One checkbox standing for a group of preparation items: ticked when any of
---- the group counts, and it turns the whole group on or off together.
-local function ItemGroup(keys)
-    return function()
-        for i = 1, #keys do
-            if MB.db.readiness.items[keys[i]] then return true end
-        end
-        return false
-    end, function(value)
-        for i = 1, #keys do
-            MB.db.readiness.items[keys[i]] = value
-        end
-        Changed("readiness")
-    end
-end
+-- The preparation check's parts, in the order they are laid out: two columns,
+-- conjured supplies down the left, reagents down the right.
+local WELCOME_PREP = {
+    { "water", "Water", "conjured water" },
+    { "runeT", "Rune of Teleportation", "Rune of Teleportation" },
+    { "food", "Food", "conjured food" },
+    { "runeP", "Rune of Portals", "Rune of Portals" },
+    { "gem", "Mana Gem", "a mana gem" },
+    { "powder", "Arcane Powder", "Arcane Powder" },
+    { "intellect", "Intellect", "how much of your group carries Arcane Intellect" },
+}
 
 --- A checkbox on the greeting. The settings panel's own refresh stops early
 --- while that panel is closed, so these keep their own list and are brought
---- up to date whenever the greeting reaches the page they are on.
+--- up to date whenever the greeting is shown.
 local function WelcomeCheck(parent, x, y, text, tooltip, get, set)
     local check = Checkbox(parent, x, y, text, tooltip, get, set)
     welcomeChecks[#welcomeChecks + 1] = function()
@@ -928,7 +925,7 @@ end
 
 local function CreateWelcome()
     welcome = Theme:CreatePanel("MageButlerWelcome", UIParent, "bg")
-    welcome:SetSize(372, WELCOME_HEIGHT[1])
+    welcome:SetSize(372, WELCOME_HEIGHT)
     welcome:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
     welcome:SetFrameStrata("DIALOG")
     welcome:SetClampedToScreen(true)
@@ -956,22 +953,15 @@ local function CreateWelcome()
     title:SetText("Welcome to MageButler")
     Theme:UseAccent(title, "SetTextColor", 1)
 
-    ---------------------------------------------------------------------------
-    -- Step one: the orb, and what a click does.
-    ---------------------------------------------------------------------------
-    local one = CreateFrame("Frame", nil, welcome)
-    one:SetPoint("TOPLEFT", 0, -48)
-    one:SetPoint("BOTTOMRIGHT", 0, 44)
-
-    local intro = Theme:Text(one, 12)
-    intro:SetPoint("TOPLEFT", 16, -6)
+    local intro = Theme:Text(welcome, 12)
+    intro:SetPoint("TOPLEFT", 16, -54)
     intro:SetWidth(340)
     intro:SetJustifyH("LEFT")
     intro:SetWordWrap(true)
     intro:SetSpacing(3)
     intro:SetText("Your orb is on screen now, a little to the right of the middle. Drag it wherever suits you.")
 
-    local clicks = Theme:Text(one, 12)
+    local clicks = Theme:Text(welcome, 12)
     clicks:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 6, -12)
     clicks:SetWidth(334)
     clicks:SetJustifyH("LEFT")
@@ -982,7 +972,7 @@ local function CreateWelcome()
         accent .. "Right-click|r  cast the buff your group needs\n" ..
         accent .. "Shift + right-click|r  these settings")
 
-    local closing = Theme:Text(one, 11)
+    local closing = Theme:Text(welcome, 11)
     closing:SetPoint("TOPLEFT", clicks, "BOTTOMLEFT", -6, -14)
     closing:SetWidth(340)
     closing:SetJustifyH("LEFT")
@@ -992,88 +982,79 @@ local function CreateWelcome()
     closing:SetText("Out of the box it restocks your reagents at vendors, fills trades with food and water, and keeps an eye on your group's Intellect. Reagents stay untouched until you are high enough to use them.")
 
     ---------------------------------------------------------------------------
-    -- Step two: what to show, and what counts as being prepared.
+    -- The choices, under the greeting rather than behind a second page.
     ---------------------------------------------------------------------------
     local checks = {}
-    local two = CreateFrame("Frame", nil, welcome)
-    two:SetPoint("TOPLEFT", 0, -48)
-    two:SetPoint("BOTTOMRIGHT", 0, 44)
-    two:Hide()
 
-    local lead = Theme:Text(two, 12)
-    lead:SetPoint("TOPLEFT", 16, -6)
-    lead:SetWidth(340)
-    lead:SetJustifyH("LEFT")
-    lead:SetWordWrap(true)
-    lead:SetText("Choose what you would like to see. None of it is final: it all lives in the settings.")
+    local choices = CreateFrame("Frame", nil, welcome)
+    choices:SetPoint("TOPLEFT", closing, "BOTTOMLEFT", 0, -16)
+    choices:SetPoint("RIGHT", welcome, "RIGHT", -16, 0)
+    choices:SetHeight(156)
 
-    checks.hud = WelcomeCheck(two, 16, -42, "Inventory HUD",
+    local showing = Theme:Text(choices, 10)
+    showing:SetPoint("TOPLEFT", 0, 0)
+    showing:SetJustifyH("LEFT")
+    showing:SetTextColor(Theme:Color("dim"))
+    showing:SetText("What to show")
+
+    checks.hud = WelcomeCheck(choices, 0, -16, "Inventory HUD",
         "A compact row of counters for food, water, mana gems and reagents.",
         Field("general", generalDB, "showHUD"))
 
-    checks.prep = WelcomeCheck(two, 16, -70, "Preparation check",
+    checks.prep = WelcomeCheck(choices, 180, -16, "Preparation check",
         "Answers whether you are stocked before a dungeon or raid.",
         Field("readiness", readinessDB, "enabled"))
 
-    local counts = Theme:Text(two, 11)
-    counts:SetPoint("TOPLEFT", 16, -100)
+    local counts = Theme:Text(choices, 10)
+    counts:SetPoint("TOPLEFT", 0, -44)
     counts:SetJustifyH("LEFT")
     counts:SetTextColor(Theme:Color("dim"))
-    counts:SetText("What counts as prepared:")
+    counts:SetText("What counts as prepared")
 
-    checks.supplies = WelcomeCheck(two, 28, -122, "Water, food and a mana gem",
-        "Counts your conjured supplies towards the preparation check.",
-        ItemGroup({ "water", "food", "gem" }))
-
-    checks.reagents = WelcomeCheck(two, 28, -148, "Reagents",
-        "Counts runes and Arcane Powder, once you are high enough to use them.",
-        ItemGroup({ "runeT", "runeP", "powder" }))
-
-    checks.intellect = WelcomeCheck(two, 28, -174, "Your group's Intellect",
-        "Counts how much of your party or raid is carrying Arcane Intellect.",
-        ItemGroup({ "intellect" }))
-
-    ---------------------------------------------------------------------------
-    -- Buttons: a pair for each step, in the same corner.
-    ---------------------------------------------------------------------------
-    local function ShowStep(step)
-        welcome:SetHeight(WELCOME_HEIGHT[step])
-        one:SetShown(step == 1)
-        two:SetShown(step == 2)
-        welcome.later:SetShown(step == 1)
-        welcome.next:SetShown(step == 1)
-        welcome.back:SetShown(step == 2)
-        welcome.done:SetShown(step == 2)
-        if step == 2 then RefreshWelcome() end
+    for i = 1, #WELCOME_PREP do
+        local key, label, what = WELCOME_PREP[i][1], WELCOME_PREP[i][2], WELCOME_PREP[i][3]
+        local column = (i - 1) % 2
+        local row = math.floor((i - 1) / 2)
+        checks[key] = WelcomeCheck(choices, 12 + column * 168, -62 - row * 24, label,
+            "Count " .. what .. " in the preparation check. Anything you are not high enough to use stays out of it either way.",
+            Field("readiness", prepDB, key))
     end
-    welcome.ShowStep = ShowStep
-
-    welcome.next = Theme:CreateButton(welcome, "What to show", 120, 24)
-    welcome.next:SetPoint("BOTTOMRIGHT", -16, 14)
-    welcome.next:SetScript("OnClick", function() ShowStep(2) end)
-
-    welcome.later = Theme:CreateButton(welcome, "Got it", 90, 24)
-    welcome.later:SetPoint("RIGHT", welcome.next, "LEFT", -8, 0)
-    welcome.later:SetScript("OnClick", function() welcome:Hide() end)
-
-    welcome.done = Theme:CreateButton(welcome, "Done", 120, 24)
-    welcome.done:SetPoint("BOTTOMRIGHT", -16, 14)
-    welcome.done:SetScript("OnClick", function() welcome:Hide() end)
-
-    welcome.back = Theme:CreateButton(welcome, "Back", 90, 24)
-    welcome.back:SetPoint("RIGHT", welcome.done, "LEFT", -8, 0)
-    welcome.back:SetScript("OnClick", function() ShowStep(1) end)
 
     welcome.checks = checks
+
+    -- Sized from its own text, so a larger font or a longer line cannot push
+    -- the choices down over the buttons. It never shrinks below the designed
+    -- height, and the gaps below are the ones used above: 12, 14 and 16.
+    welcome.Resize = function()
+        local text = (intro:GetStringHeight() or 0)
+            + (clicks:GetStringHeight() or 0)
+            + (closing:GetStringHeight() or 0)
+        welcome:SetHeight(math.max(WELCOME_HEIGHT, 54 + text + 42 + 156 + 44))
+    end
+
+    local open = Theme:CreateButton(welcome, "Open settings", 120, 24)
+    open:SetPoint("BOTTOMRIGHT", -16, 14)
+    open:SetScript("OnClick", function()
+        welcome:Hide()
+        Settings:Open("general")
+    end)
+
+    local later = Theme:CreateButton(welcome, "Got it", 90, 24)
+    later:SetPoint("RIGHT", open, "LEFT", -8, 0)
+    later:SetScript("OnClick", function()
+        welcome:Hide()
+    end)
+
     Settings.welcome = welcome
 end
 
 --- The first-run greeting. Shows itself once per character; `/mb welcome`
---- brings it back. It always opens on the first step.
+--- brings it back.
 function Settings:ShowWelcome()
     if not MB.ready then return end
     if not welcome then CreateWelcome() end
-    welcome.ShowStep(1)
+    welcome.Resize()
+    RefreshWelcome()
     welcome:Show()
 end
 

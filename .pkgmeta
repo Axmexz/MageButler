@@ -1,0 +1,6 @@
+# CurseForge packaging. Without this file the packaged folder is named after
+# the project's URL slug, which is lowercase; WoW wants it to match the TOC.
+package-as: MageButler
+
+# MageButler embeds no libraries, so a separate "nolib" package is pointless.
+enable-nolib-creation: no

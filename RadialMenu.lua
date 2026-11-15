@@ -70,6 +70,10 @@ local function OrbTooltip(self)
     if not MB.db.general.lockPositions then
         GameTooltip:AddLine("Drag: move", 0.56, 0.63, 0.79)
     end
+    -- Only worth saying while the trade assistant would otherwise fill by itself.
+    if MB.db.trade.enabled and MB.db.trade.shiftSkips then
+        GameTooltip:AddLine("Shift as a trade opens: no water or food is given", 0.56, 0.63, 0.79)
+    end
     if MB.BuffWatch and MB.BuffWatch.AddTooltipLines then
         MB.BuffWatch:AddTooltipLines(GameTooltip)
     end

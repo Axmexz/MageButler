@@ -937,7 +937,8 @@ local function CreateWelcome()
     clicks:SetText(
         accent .. "Left-click|r  the radial menu\n" ..
         accent .. "Right-click|r  cast the buff your group needs\n" ..
-        accent .. "Shift + right-click|r  these settings")
+        accent .. "Shift + right-click|r  these settings\n" ..
+        accent .. "Shift as a trade opens|r  no water or food is given")
 
     local closing = Theme:Text(welcome, 11)
     closing:SetPoint("TOPLEFT", clicks, "BOTTOMLEFT", -6, -14)
@@ -946,7 +947,7 @@ local function CreateWelcome()
     closing:SetWordWrap(true)
     closing:SetSpacing(3)
     closing:SetTextColor(Theme:Color("dim"))
-    closing:SetText("Out of the box it restocks your reagents at vendors, fills trades with food and water, and keeps an eye on your group's Intellect. Hold Shift as a trade opens and it fills nothing, so your supplies stay yours. Reagents stay untouched until you are high enough to use them.")
+    closing:SetText("Out of the box it restocks your reagents at vendors, fills trades with food and water, and keeps an eye on your group's Intellect. Reagents stay untouched until you are high enough to use them.")
 
     ---------------------------------------------------------------------------
     -- The choices, under the greeting rather than behind a second page.

@@ -39,8 +39,8 @@ local lastState = {}
 --- How many of the strongest rank carried, and which rank that is. Lists run
 --- weakest first. Leftovers of an older rank are not counted: a handful of
 --- Rank 4 water is not the same as having that much of Rank 7, and treating
---- it as the same made the counts, the HUD and the preparation check claim
---- more than the player really had.
+--- it as the same made the counts, the radial menu and the preparation
+--- check claim more than the player really had.
 local function CountBest(list)
     for i = #list, 1, -1 do
         local n = API.ItemCount(list[i])

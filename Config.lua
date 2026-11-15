@@ -17,7 +17,6 @@ Config.defaults = {
     general = {
         enabled = true,
         showOrb = true,
-        showHUD = true,
         lockPositions = false,
         uiScale = 1.0,
         chatMessages = false,
@@ -114,19 +113,6 @@ Config.defaults = {
         missingFirst = true,
         manaUsersOnly = false,
     },
-    hud = {
-        x = 0,
-        y = -260,
-        cells = {
-            intellect = true,
-            food = true,
-            water = true,
-            gem = true,
-            runeT = true,
-            runeP = true,
-            powder = true,
-        },
-    },
     readiness = {
         enabled = true,
         onReadyCheck = true,
@@ -143,7 +129,6 @@ Config.defaults = {
         accent = "arcane",
         panelAlpha = 0.92,
         glow = true,
-        hudLabels = true,
         statusAnimations = true,
     },
     keybinds = {},
@@ -231,6 +216,19 @@ local function MigrateTrade(profile)
     trade.presets, trade.classes, trade.classAware = nil, nil, nil
 end
 
+--- The inventory HUD was removed. Its stored position, its per-counter list and
+--- the two settings that drove it are dropped so a profile written by an older
+--- version does not carry them around for ever.
+local function DropHUD(profile)
+    profile.hud = nil
+    if type(profile.general) == "table" then
+        profile.general.showHUD = nil
+    end
+    if type(profile.appearance) == "table" then
+        profile.appearance.hudLabels = nil
+    end
+end
+
 function Config:Init()
     if type(MageButlerDB) ~= "table" then
         MageButlerDB = {}
@@ -248,6 +246,7 @@ function Config:Init()
         root.chars[self.key] = {}
     end
     MigrateTrade(root.chars[self.key])
+    DropHUD(root.chars[self.key])
     MB.db = ApplyDefaults(root.chars[self.key], self.defaults)
 end
 
@@ -273,6 +272,7 @@ function Config:CopyFrom(key)
     if type(source) ~= "table" or key == self.key then return false end
     local copy = DeepCopy(source)
     MigrateTrade(copy)
+    DropHUD(copy)
     self.root.chars[self.key] = copy
     MB.db = ApplyDefaults(copy, self.defaults)
     MB:Fire("SETTINGS_CHANGED", "all")
@@ -288,7 +288,6 @@ end
 
 function Config:ResetPositions()
     MB.db.orb.x, MB.db.orb.y = self.defaults.orb.x, self.defaults.orb.y
-    MB.db.hud.x, MB.db.hud.y = self.defaults.hud.x, self.defaults.hud.y
     -- Back to following the orb.
     MB.db.buffwatch.x, MB.db.buffwatch.y = nil, nil
     MB.db.readiness.x, MB.db.readiness.y = nil, nil

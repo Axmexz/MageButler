@@ -86,18 +86,6 @@ local function Note(page, y, text)
     return label
 end
 
---- A container for everything that follows a wrapped note, anchored under it
---- rather than at a fixed offset. How many lines a note wraps to depends on
---- the font and the language, so a fixed offset is what makes text overlap.
---- Positions inside the section are measured from its own top.
-local function SectionBelow(page, region, gap)
-    local section = CreateFrame("Frame", nil, page)
-    section:SetPoint("TOPLEFT", region, "BOTTOMLEFT", 0, -(gap or 20))
-    section:SetPoint("RIGHT", page, "RIGHT", 0, 0)
-    section:SetHeight(1)
-    return section
-end
-
 local function Checkbox(page, x, y, text, tooltip, get, set)
     local check = CreateFrame("CheckButton", nil, page, "BackdropTemplate")
     check:SetSize(18, 18)
@@ -353,31 +341,29 @@ builders.general = function(page)
         Field("general", general, "enabled"))
     Checkbox(page, COLUMN, -28, "Show Mage orb", "The orb opens the radial menu. /mb orb also toggles it.",
         Field("general", general, "showOrb"))
-    Checkbox(page, 0, -52, "Show inventory HUD", "A compact bar with food, water, mana gem and reagent counts.",
-        Field("general", general, "showHUD"))
-    Checkbox(page, COLUMN, -52, "Lock positions", "Prevents the orb and the HUD from being dragged.",
+    Checkbox(page, 0, -52, "Lock positions", "Prevents the orb and MageButler's panels from being dragged.",
         Field("general", general, "lockPositions"))
-    Checkbox(page, 0, -76, "Repeat notifications in chat", "Also prints MageButler's on-screen notifications to the chat frame.",
+    Checkbox(page, COLUMN, -52, "Repeat notifications in chat", "Also prints MageButler's on-screen notifications to the chat frame.",
         Field("general", general, "chatMessages"))
 
-    Slider(page, 0, -108, 200, "UI scale", "Scales the orb, the radial menu and the HUD.", 0.6, 1.6, 0.05,
+    Slider(page, 0, -84, 200, "UI scale", "Scales the orb and the radial menu.", 0.6, 1.6, 0.05,
         function(value) return math.floor(value * 100 + 0.5) .. "%" end,
         Field("general", general, "uiScale"))
-    PanelButton(page, COLUMN, -118, "Reset positions", 130, "Moves the orb and the HUD back to their default places.", function()
+    PanelButton(page, COLUMN, -94, "Reset positions", 130, "Moves the orb and MageButler's panels back to their default places.", function()
         MB.Config:ResetPositions()
         Changed("all")
     end)
 
-    Header(page, -160, "Preparation Check")
-    Checkbox(page, 0, -188, "Show the preparation indicator",
-        "A small pip on the orb and a dot on the HUD: green when you carry enough water, food, a mana gem and reagents. Click the pip for the checklist.",
+    Header(page, -136, "Preparation Check")
+    Checkbox(page, 0, -164, "Show the preparation indicator",
+        "A small pip on the orb: green when you carry enough water, food, a mana gem and reagents. Click the pip for the checklist.",
         Field("general", readiness, "enabled"))
-    Checkbox(page, 0, -212, "Report on ready checks", "Shows the preparation result whenever a ready check starts.",
+    Checkbox(page, 0, -188, "Report on ready checks", "Shows the preparation result whenever a ready check starts.",
         Field("general", readiness, "onReadyCheck"))
-    Checkbox(page, COLUMN, -212, "Warn when entering instances", "Shows what is missing when you walk into a dungeon or raid short of supplies.",
+    Checkbox(page, COLUMN, -188, "Warn when entering instances", "Shows what is missing when you walk into a dungeon or raid short of supplies.",
         Field("general", readiness, "onInstance"))
 
-    Label(page, 0, -240, "Count towards ready", 10, "dim")
+    Label(page, 0, -216, "Count towards ready", 10, "dim")
     local prep = {
         { "water", "Water", "conjured water" },
         { "food", "Food", "conjured food" },
@@ -391,16 +377,16 @@ builders.general = function(page)
     for i = 1, #prep do
         local column = (i - 1) % 4
         local row = math.floor((i - 1) / 4)
-        Checkbox(page, column * 108, -258 - row * 24, prep[i][2],
+        Checkbox(page, column * 108, -234 - row * 24, prep[i][2],
             "Count " .. prep[i][3] .. " in the preparation check. Anything you are not high enough to use stays out of it either way.",
             Field("general", prepItems, prep[i][1]))
     end
 
-    Header(page, -316, "Character Profile")
-    local profileText = Label(page, 0, -342, "", 11, "dim")
+    Header(page, -292, "Character Profile")
+    local profileText = Label(page, 0, -318, "", 11, "dim")
 
     local selected
-    local picker = PanelButton(page, 0, -364, "", 190, "Click to choose which character to copy from.", function(self)
+    local picker = PanelButton(page, 0, -340, "", 190, "Click to choose which character to copy from.", function(self)
         local list = MB.Config:GetOtherProfiles()
         if #list == 0 then return end
         local index = 1
@@ -410,12 +396,12 @@ builders.general = function(page)
         selected = list[index]
         self.label:SetText(selected)
     end)
-    local copy = PanelButton(page, 198, -364, "Copy settings", 110, "Replaces this character's settings with the selected character's.", function()
+    local copy = PanelButton(page, 198, -340, "Copy settings", 110, "Replaces this character's settings with the selected character's.", function()
         if selected and MB.Config:CopyFrom(selected) then
             MB:Print("settings copied from " .. selected .. ".")
         end
     end)
-    PanelButton(page, 316, -364, "Reset defaults", 110, "Restores every MageButler setting for this character.", function()
+    PanelButton(page, 316, -340, "Reset defaults", 110, "Restores every MageButler setting for this character.", function()
         MB.Config:Reset()
         MB:Print("settings reset to defaults.")
     end)
@@ -597,11 +583,10 @@ end
 
 builders.conjuring = function(page)
     local function conjuring() return MB.db.conjuring end
-    local function cells() return MB.db.hud.cells end
 
     Header(page, 0, "Conjuring")
     Label(page, 0, -34, "Water to carry", 12, nil, 114)
-    NumberBox(page, 120, -30, 52, "Water target", "Counted in items (20 is one full stack). Used by the HUD and the preparation check. 0 turns tracking off.", 0, 400,
+    NumberBox(page, 120, -30, 52, "Water target", "Counted in items (20 is one full stack). Used by the preparation check. 0 turns tracking off.", 0, 400,
         Field("conjuring", conjuring, "waterTarget"))
     Label(page, COLUMN, -34, "Food to carry", 12, nil, 114)
     NumberBox(page, COLUMN + 120, -30, 52, "Food target", "Counted in items (20 is one full stack). 0 turns tracking off.", 0, 400,
@@ -612,22 +597,7 @@ builders.conjuring = function(page)
     Checkbox(page, COLUMN, -64, "Warn when supplies run out", "A short notification the moment your last conjured water or food is gone.",
         Field("conjuring", conjuring, "warnMissing"))
 
-    local note = Note(page, -94, "The radial buttons cast the highest rank you have learned, found in your spellbook. The Mana Gem button conjures the strongest gem you are not carrying; right-click uses your best gem. MageButler never casts on its own.")
-
-    -- Anchored under the note, so the heading cannot land on top of it.
-    local hud = SectionBelow(page, note, 22)
-    Header(hud, 0, "HUD Counters")
-    local names = {
-        { "food", "Food" }, { "water", "Water" }, { "gem", "Mana Gem" },
-        { "runeT", "Rune of Teleportation" }, { "runeP", "Rune of Portals" }, { "powder", "Arcane Powder" },
-        { "intellect", "Intellect coverage" },
-    }
-    for i = 1, #names do
-        local column = (i - 1) % 2
-        local row = math.floor((i - 1) / 2)
-        Checkbox(hud, column * COLUMN, -30 - row * 24, names[i][2], "Shows this counter on the HUD.",
-            Field("conjuring", cells, names[i][1]))
-    end
+    Note(page, -94, "The radial buttons cast the highest rank you have learned, found in your spellbook. The Mana Gem button conjures the strongest gem you are not carrying; right-click uses your best gem. MageButler never casts on its own.")
 end
 
 builders.trading = function(page)
@@ -730,15 +700,13 @@ builders.appearance = function(page)
         accent.label:SetTextColor(Theme:Accent())
     end
 
-    Slider(page, 0, -66, 200, "Panel opacity", "Background opacity of the HUD, submenus and this panel.", 0.5, 1, 0.05,
+    Slider(page, 0, -66, 200, "Panel opacity", "Background opacity of the submenus and this panel.", 0.5, 1, 0.05,
         function(value) return math.floor(value * 100 + 0.5) .. "%" end,
         Field("appearance", appearance, "panelAlpha"))
 
     Checkbox(page, 0, -116, "Orb glow", "A soft halo behind the orb.",
         Field("appearance", appearance, "glow"))
-    Checkbox(page, COLUMN, -116, "HUD labels", "Shows a small name under each HUD counter.",
-        Field("appearance", appearance, "hudLabels"))
-    Checkbox(page, 0, -140, "Status animations",
+    Checkbox(page, COLUMN, -116, "Status animations",
         "The status pips on the orb pulse while something needs attention: slowly for a warning, faster when something is missing. Steady when all is well.",
         Field("appearance", appearance, "statusAnimations"))
 end
@@ -888,9 +856,8 @@ end
 -------------------------------------------------------------------------------
 local welcome
 local welcomeChecks = {}
-local WELCOME_HEIGHT = 444
+local WELCOME_HEIGHT = 428
 
-local function generalDB() return MB.db.general end
 local function readinessDB() return MB.db.readiness end
 local function prepDB() return MB.db.readiness.items end
 
@@ -989,24 +956,14 @@ local function CreateWelcome()
     local choices = CreateFrame("Frame", nil, welcome)
     choices:SetPoint("TOPLEFT", closing, "BOTTOMLEFT", 0, -16)
     choices:SetPoint("RIGHT", welcome, "RIGHT", -16, 0)
-    choices:SetHeight(156)
+    choices:SetHeight(140)
 
-    local showing = Theme:Text(choices, 10)
-    showing:SetPoint("TOPLEFT", 0, 0)
-    showing:SetJustifyH("LEFT")
-    showing:SetTextColor(Theme:Color("dim"))
-    showing:SetText("What to show")
-
-    checks.hud = WelcomeCheck(choices, 0, -16, "Inventory HUD",
-        "A compact row of counters for food, water, mana gems and reagents.",
-        Field("general", generalDB, "showHUD"))
-
-    checks.prep = WelcomeCheck(choices, 180, -16, "Preparation check",
+    checks.prep = WelcomeCheck(choices, 0, 0, "Preparation check",
         "Answers whether you are stocked before a dungeon or raid.",
         Field("readiness", readinessDB, "enabled"))
 
     local counts = Theme:Text(choices, 10)
-    counts:SetPoint("TOPLEFT", 0, -44)
+    counts:SetPoint("TOPLEFT", 0, -28)
     counts:SetJustifyH("LEFT")
     counts:SetTextColor(Theme:Color("dim"))
     counts:SetText("What counts as prepared")
@@ -1015,7 +972,7 @@ local function CreateWelcome()
         local key, label, what = WELCOME_PREP[i][1], WELCOME_PREP[i][2], WELCOME_PREP[i][3]
         local column = (i - 1) % 2
         local row = math.floor((i - 1) / 2)
-        checks[key] = WelcomeCheck(choices, 12 + column * 168, -62 - row * 24, label,
+        checks[key] = WelcomeCheck(choices, 12 + column * 168, -46 - row * 24, label,
             "Count " .. what .. " in the preparation check. Anything you are not high enough to use stays out of it either way.",
             Field("readiness", prepDB, key))
     end
@@ -1029,7 +986,7 @@ local function CreateWelcome()
         local text = (intro:GetStringHeight() or 0)
             + (clicks:GetStringHeight() or 0)
             + (closing:GetStringHeight() or 0)
-        welcome:SetHeight(math.max(WELCOME_HEIGHT, 54 + text + 42 + 156 + 44))
+        welcome:SetHeight(math.max(WELCOME_HEIGHT, 54 + text + 42 + 140 + 44))
     end
 
     local open = Theme:CreateButton(welcome, "Open settings", 120, 24)

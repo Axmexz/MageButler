@@ -1,6 +1,6 @@
 -- MageButler - Copyright (c) 2026 Padre Pidisc. All rights reserved. See LICENSE.txt.
 -- MageButler: preparation indicator.
--- One glance (the pip on the orb, the dot on the HUD) or one click (the pip,
+-- One glance (the pip on the orb) or one click (the pip,
 -- or middle-click on the orb) answers "am I stocked for this dungeon or raid?":
 -- conjured water and food against their targets, a mana gem, and each reagent.
 -- It adds no button to the radial menu.

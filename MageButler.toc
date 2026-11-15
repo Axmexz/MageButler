@@ -17,6 +17,5 @@ Reagents.lua
 Trade.lua
 RadialMenu.lua
 BuffWatch.lua
-HUD.lua
 Readiness.lua
 Settings.lua

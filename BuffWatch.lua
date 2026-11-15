@@ -585,7 +585,7 @@ function BuffWatch:RefreshVisuals()
     RefreshList()
 end
 
---- Buffed and watched player counts, for the HUD and the preparation check.
+--- Buffed and watched player counts, for the preparation check.
 function BuffWatch:GetCoverage()
     return state.ok + state.expiring, state.total
 end

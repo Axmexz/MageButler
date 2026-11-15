@@ -54,7 +54,7 @@ The radial menu holds Portals, Teleports, Conjure Water, Conjure Food, Mana Gem
 and the trade assistant. Portals and teleports list only the destinations you
 have actually learned.
 
-`/mb` opens the settings. It also takes `menu`, `orb`, `hud`, `ready`, `buffs`,
+`/mb` opens the settings. It also takes `menu`, `orb`, `ready`, `buffs`,
 `fill` and `reset`; `/mb` on its own lists them. `/magebutler` works too.
 
 Every spell is cast by your own click. MageButler never casts for you, and it

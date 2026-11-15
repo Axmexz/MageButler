@@ -418,12 +418,11 @@ local function PrintHelp()
     MB:Print("  |cff5ed7ff/mb|r - open or close the settings panel")
     MB:Print("  |cff5ed7ff/mb menu|r - toggle the radial menu")
     MB:Print("  |cff5ed7ff/mb orb|r - hide or restore the orb")
-    MB:Print("  |cff5ed7ff/mb hud|r - hide or restore the inventory HUD")
     MB:Print("  |cff5ed7ff/mb ready|r - show the preparation check")
     MB:Print("  |cff5ed7ff/mb buffs|r - open or close the Buff Watch player list")
     MB:Print("  |cff5ed7ff/mb fill|r - fill the open trade window")
     MB:Print("  |cff5ed7ff/mb welcome|r - show the introduction again")
-    MB:Print("  |cff5ed7ff/mb reset|r - move the orb and HUD back to their default positions")
+    MB:Print("  |cff5ed7ff/mb reset|r - move the orb and panels back to their default positions")
 end
 
 SLASH_MAGEBUTLER1 = "/magebutler"
@@ -446,10 +445,6 @@ SlashCmdList["MAGEBUTLER"] = function(message)
         MB.db.general.showOrb = not MB.db.general.showOrb
         MB:Fire("SETTINGS_CHANGED", "general")
         MB:Print(MB.db.general.showOrb and "orb shown." or "orb hidden. Type /mb orb to restore it.")
-    elseif command == "hud" then
-        MB.db.general.showHUD = not MB.db.general.showHUD
-        MB:Fire("SETTINGS_CHANGED", "general")
-        MB:Print(MB.db.general.showHUD and "HUD shown." or "HUD hidden.")
     elseif command == "ready" or command == "prep" or command == "check" then
         MB.Readiness:Report(true)
     elseif command == "welcome" then
@@ -461,7 +456,7 @@ SlashCmdList["MAGEBUTLER"] = function(message)
     elseif command == "reset" then
         MB.Config:ResetPositions()
         MB:Fire("SETTINGS_CHANGED", "all")
-        MB:Print("orb and HUD positions reset.")
+        MB:Print("positions reset.")
     else
         PrintHelp()
     end

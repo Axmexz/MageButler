@@ -134,8 +134,11 @@ local function CreateOrb()
     orb.flash:SetBlendMode("ADD")
     orb.flash:SetPoint("TOPLEFT", -14, 14)
     orb.flash:SetPoint("BOTTOMRIGHT", 14, -14)
+    -- Invisible until a click plays it. It is not registered for the accent
+    -- colour like the other textures: colouring a texture also sets how
+    -- opaque it is, which left this one fully lit from login until the first
+    -- click faded it out. Theme:Flash colours it as it plays instead.
     orb.flash:SetAlpha(0)
-    Theme:UseAccent(orb.flash, "SetVertexColor", 1)
 
     orb.hover = orb:CreateTexture(nil, "HIGHLIGHT")
     orb.hover:SetTexture(MB.MEDIA .. "Glow.tga")

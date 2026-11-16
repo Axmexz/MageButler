@@ -385,6 +385,7 @@ function Theme:Flash(region, ring, restore)
     end
 
     group:Stop()
+    region:SetVertexColor(self:Accent())
     region:SetAlpha(0)
     group:Play()
 end

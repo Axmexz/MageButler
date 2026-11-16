@@ -381,6 +381,7 @@ function Theme:SetBreath(region, mode)
         group.alpha:SetFromAlpha(0.35)
         group.alpha:SetToAlpha(1)
         group.alpha:SetSmoothing("IN_OUT")
+        region:SetAlpha(0.35)   -- where the breath starts, so a new loop does not jump
         group.scale = group:CreateAnimation("Scale")
         if group.scale.SetScaleFrom then
             group.scale:SetScaleFrom(0.85, 0.85)
@@ -422,11 +423,15 @@ function Theme:SetWave(region, mode)
         end
         group.scale:SetSmoothing("OUT")
         group.alpha = group:CreateAnimation("Alpha")
-        group.alpha:SetFromAlpha(0.9)
+        group.alpha:SetFromAlpha(0.8)
         group.alpha:SetToAlpha(0)
-        group.alpha:SetSmoothing("OUT")
         region.mbWave = group
     end
+    -- Invisible in its own right, so that it is only ever seen through the
+    -- animation. Between one loop and the next a texture shows at its own
+    -- opacity for an instant, and at full opacity that was a bright ring
+    -- snapping back onto the orb each time the ripple began again.
+    region:SetAlpha(0)
     region:Show()
     if region.mbWaveMode ~= mode then
         local duration = BEAT       -- one unhurried pace, whatever the colour

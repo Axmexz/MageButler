@@ -307,6 +307,26 @@ function Theme:RoundTooltip(frame, build)
     end)
 end
 
+-- Every status animation keeps the same beat and the same phase. A pip that
+-- starts to pulse while the halo is already breathing would otherwise run
+-- half a beat behind it for as long as both lasted, so whenever one starts,
+-- all of them start again together.
+local BEAT = 2.5
+local running = {}
+
+local function Start(group)
+    running[group] = true
+    for other in pairs(running) do
+        other:Stop()
+        other:Play()
+    end
+end
+
+local function Halt(group)
+    running[group] = nil
+    group:Stop()
+end
+
 --- Status animation for an indicator: "fast" (something is missing), "slow"
 --- (a warning) or nil for a steady light. A gentle alpha pulse, nothing more.
 function Theme:SetPulse(region, mode)
@@ -316,7 +336,7 @@ function Theme:SetPulse(region, mode)
     local group = region.mbPulse
     if not mode then
         if group and region.mbPulseMode then
-            group:Stop()
+            Halt(group)
         end
         region.mbPulseMode = nil
         region:SetAlpha(1)
@@ -326,16 +346,15 @@ function Theme:SetPulse(region, mode)
         group = region:CreateAnimationGroup()
         group:SetLooping("BOUNCE")
         group.alpha = group:CreateAnimation("Alpha")
-        group.alpha:SetFromAlpha(1)
-        group.alpha:SetToAlpha(0.25)
+        group.alpha:SetFromAlpha(0.3)   -- dim to bright, the same way round as the halo
+        group.alpha:SetToAlpha(1)
         group.alpha:SetSmoothing("IN_OUT")
         region.mbPulse = group
     end
     if region.mbPulseMode ~= mode then
-        group:Stop()
-        group.alpha:SetDuration(mode == "fast" and 0.45 or 1.1)
+        group.alpha:SetDuration(BEAT / 2)
         region.mbPulseMode = mode
-        group:Play()
+        Start(group)
     end
 end
 
@@ -349,7 +368,7 @@ function Theme:SetBreath(region, mode)
     local group = region.mbBreath
     if not mode then
         if group and region.mbBreathMode then
-            group:Stop()
+            Halt(group)
         end
         region.mbBreathMode = nil
         region:SetAlpha(0.7)
@@ -371,12 +390,11 @@ function Theme:SetBreath(region, mode)
         region.mbBreath = group
     end
     if region.mbBreathMode ~= mode then
-        group:Stop()
-        local duration = 1.25   -- out and back in 2.5s, in step with the ripple
+        local duration = BEAT / 2   -- out and back in one beat, in step with the ripple
         group.alpha:SetDuration(duration)
         group.scale:SetDuration(duration)
         region.mbBreathMode = mode
-        group:Play()
+        Start(group)
     end
 end
 
@@ -389,7 +407,7 @@ function Theme:SetWave(region, mode)
     end
     local group = region.mbWave
     if not mode then
-        if group then group:Stop() end
+        if group then Halt(group) end
         region.mbWaveMode = nil
         region:Hide()
         return
@@ -411,12 +429,11 @@ function Theme:SetWave(region, mode)
     end
     region:Show()
     if region.mbWaveMode ~= mode then
-        group:Stop()
-        local duration = 2.5    -- one unhurried pace, whatever the colour
+        local duration = BEAT       -- one unhurried pace, whatever the colour
         group.scale:SetDuration(duration)
         group.alpha:SetDuration(duration)
         region.mbWaveMode = mode
-        group:Play()
+        Start(group)
     end
 end
 

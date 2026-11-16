@@ -723,16 +723,28 @@ end
 --- The halo behind the orb is a call for attention, not decoration: it is lit
 --- only while Buff Watch has players to buff or the preparation check is
 --- short of something, and dark the rest of the time.
+--- The ring goes with it: at rest it is drawn at about half strength, so the
+--- orb sits quietly on the screen, and it comes up to full brightness, or to
+--- Buff Watch's warning colour, only while there is something to see to.
+local REST = 0.5
+
 function Radial:RefreshGlow()
     if not orb then return end
-    local attention = false
-    if MB.db.appearance.glow and MB.db.general.enabled then
-        local watch, ready = MB.BuffWatch, MB.Readiness
-        local buffs = watch and not watch:GetState().paused and watch:GetOverall()
-        local supplies = ready and ready:GetOverall()
-        attention = buffs == "low" or buffs == "none" or supplies == "low" or supplies == "none"
+    local watch, ready = MB.BuffWatch, MB.Readiness
+    local buffs = watch and not watch:GetState().paused and watch:GetOverall()
+    local supplies = ready and ready:GetOverall()
+    local buffsNeed = buffs == "low" or buffs == "none"
+    local attention = MB.db.general.enabled and (buffsNeed or supplies == "low" or supplies == "none")
+
+    orb.halo:SetShown(attention and MB.db.appearance.glow or false)
+
+    if buffsNeed and MB.db.buffwatch.orbColors then
+        orb.ring:SetVertexColor(Theme:StateColor(buffs))
+    else
+        local r, g, b = Theme:Accent()
+        local strength = attention and 1 or REST
+        orb.ring:SetVertexColor(r * strength, g * strength, b * strength)
     end
-    orb.halo:SetShown(attention)
 end
 
 --- Slash-command toggle. In combat only the orb (a secure click) can do this.

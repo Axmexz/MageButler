@@ -580,7 +580,6 @@ end
 
 function BuffWatch:RefreshVisuals()
     local db = MB.db.buffwatch
-    local orb = MB.RadialMenu.orb
     local overall = state.overall
     local watching = MB.db.general.enabled and db.enabled
 
@@ -594,12 +593,6 @@ function BuffWatch:RefreshVisuals()
         end
     end
 
-    -- Warning colours on the orb's ring; the accent colour when all is well.
-    if watching and db.orbColors and (overall == "low" or overall == "none") and not state.paused then
-        orb.ring:SetVertexColor(Theme:StateColor(overall))
-    else
-        orb.ring:SetVertexColor(Theme:Accent())
-    end
 
     if counter then
         if watching and db.showCounter and state.active and state.context ~= "solo" and state.total > 0 then

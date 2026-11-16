@@ -708,6 +708,16 @@ function MB:PrintDiagnostics()
         self:Print("  nothing that is counted is in the bags.")
     end
 
+    -- What the halo behind the orb is going by, since it is hard to tell a
+    -- lit halo from the hover glow or from the ring by eye.
+    local orb, watch, ready = self.RadialMenu.orb, self.BuffWatch, self.Readiness
+    if orb and watch and ready then
+        self:Print("orb halo: " .. (orb.halo:IsShown() and "lit" or "dark")
+            .. ". Buff Watch: " .. (watch:GetState().paused and "paused" or watch:GetOverall())
+            .. ", preparation: " .. ready:GetOverall()
+            .. ", glow setting: " .. (self.db.appearance.glow and "on" or "off") .. ".")
+    end
+
     local saved = self.Config.root and self.Config.root.trail
     PrintTrail("before the last reload", saved and saved.last, 10)
     PrintTrail("this session", self.trail, 15)

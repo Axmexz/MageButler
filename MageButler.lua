@@ -401,7 +401,8 @@ local DOUBT_TRIES = 4      -- the same when nothing explains why they read empty
 local LOADING_LIMIT = 90   -- a loading screen older than this is taken to be over
 local WITNESSES = 3        -- items asked about before the counts are doubted
 
-MB.inventoryReady = false
+MB.inventoryReady = false   -- the bags can be read and believed right now
+MB.inventoryKnown = false   -- they have been read at least once this session
 
 local tracked, isTracked = {}, {}   -- the item IDs that are counted
 local snapshot = {}                 -- [itemID] = count at the last read believed
@@ -490,6 +491,7 @@ local function ReadSnapshot(source, expected)
             end
         end
     end
+    MB.inventoryKnown = true
     if gone then
         MB:Log("now zero: " .. gone .. " (" .. source .. (InCombatLockdown() and ", in combat" or "") .. ")")
     end

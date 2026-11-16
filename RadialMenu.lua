@@ -441,7 +441,9 @@ ButtonTooltip = function(button)
         local target = Conjuring:Target(key)
         local have = Conjuring:Count(key)
         GameTooltip:AddLine(" ")
-        if target > 0 then
+        if not MB.inventoryKnown then
+            GameTooltip:AddLine("In bags: not counted yet", 0.56, 0.63, 0.79)
+        elseif target > 0 then
             GameTooltip:AddLine("In bags: " .. have .. " / " .. target, 0.88, 0.92, 1)
         else
             GameTooltip:AddLine("In bags: " .. have, 0.88, 0.92, 1)
@@ -473,8 +475,12 @@ ButtonTooltip = function(button)
             GameTooltip:AddLine("None learned yet.", 1, 0.35, 0.35)
         else
             GameTooltip:AddLine(#list .. (#list == 1 and " destination" or " destinations"), 0.88, 0.92, 1)
-            local cr, cg, cb = Theme:StateColor(Reagents:Count(reagent) > 0 and "ok" or "none")
-            GameTooltip:AddLine(Reagents:Name(reagent) .. ": " .. Reagents:Count(reagent), cr, cg, cb)
+            if MB.inventoryKnown then
+                local cr, cg, cb = Theme:StateColor(Reagents:Count(reagent) > 0 and "ok" or "none")
+                GameTooltip:AddLine(Reagents:Name(reagent) .. ": " .. Reagents:Count(reagent), cr, cg, cb)
+            else
+                GameTooltip:AddLine(Reagents:Name(reagent) .. ": not counted yet", 0.56, 0.63, 0.79)
+            end
             AddHint("Click to choose a destination")
         end
     elseif key == "trade" then
@@ -508,19 +514,23 @@ end
 function Radial:RefreshVisuals()
     if not menu or not menu:IsShown() then return end
 
+    -- Until the bags have been read once the counts are unknown, not zero,
+    -- so no number is shown at all and nothing is dimmed for want of a rune.
+    local known = MB.inventoryKnown
+
     for _, kind in ipairs(CONJURED) do
         local button = buttons[kind]
         button.icon:SetTexture(Conjuring:Icon(kind))
         SetButtonState(button, Conjuring:GetSpell(kind) ~= nil)
         local state = Conjuring:State(kind)
-        SetCount(button, Conjuring:Count(kind), state == "off" and "ok" or state)
+        SetCount(button, known and Conjuring:Count(kind) or nil, state == "off" and "ok" or state)
     end
 
     local gem = buttons.gem
     gem.icon:SetTexture(Conjuring:Icon("gem"))
     SetButtonState(gem, Conjuring:GetGemCast() ~= nil)
     local gemCount = Conjuring:Count("gem")
-    SetCount(gem, gemCount, gemCount > 0 and "ok" or "none")
+    SetCount(gem, known and gemCount or nil, gemCount > 0 and "ok" or "none")
 
     for key, reagent in pairs(SUB_REAGENT) do
         local button = buttons[key]
@@ -531,7 +541,7 @@ function Radial:RefreshVisuals()
 
         local have = Reagents:Count(reagent)
         local state = have > 0 and "ok" or "none"
-        if #list > 0 then
+        if #list > 0 and known then
             SetCount(button, have, state)
             sub.reagent:SetText(Reagents.SHORT[reagent] .. "  " .. have)
             sub.reagent:SetTextColor(Theme:StateColor(state))
@@ -540,10 +550,11 @@ function Radial:RefreshVisuals()
             sub.reagent:SetText("")
         end
         -- A destination cannot be cast without its rune: dim the list.
+        local short = known and have <= 0
         for i = 1, #sub.rows do
             local row = sub.rows[i]
-            row.icon:SetDesaturated(have <= 0)
-            row.text:SetTextColor(Theme:Color(have > 0 and "text" or "off"))
+            row.icon:SetDesaturated(short)
+            row.text:SetTextColor(Theme:Color(short and "off" or "text"))
         end
     end
 

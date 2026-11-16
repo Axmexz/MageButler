@@ -41,6 +41,10 @@ local function Evaluate()
     wipe(items)
     overall = "off"
     if not (MB.db.general.enabled and MB.db.readiness.enabled) then return end
+    -- Until the bags have been read once there is nothing to judge: the
+    -- counts are not zero, they are unknown, and must not be shown as a
+    -- Mage who has run out of everything.
+    if not MB.inventoryKnown then return end
 
     -- Only what the player asked to be told about.
     local want = MB.db.readiness.items
@@ -120,7 +124,10 @@ end
 function Readiness:Report(verbose)
     Evaluate()
     if overall == "off" then
-        if verbose then MB:Print("the preparation check is turned off.") end
+        if verbose then
+            MB:Print(MB.inventoryKnown and "the preparation check is turned off."
+                or "your bags have not been counted yet. Try again in a moment.")
+        end
         return
     end
     if overall == "ok" then

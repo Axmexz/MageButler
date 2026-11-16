@@ -307,28 +307,104 @@ function Theme:RoundTooltip(frame, build)
     end)
 end
 
--- Every status animation keeps the same beat and the same phase. A pip that
--- starts to pulse while the halo is already breathing would otherwise run
--- half a beat behind it for as long as both lasted, so whenever one starts,
--- all of them start again together.
+-- Every status animation keeps the same beat and the same phase, and none of
+-- them is ever cut off or restarted in mid-movement:
+--   * the first one to start sets the beat;
+--   * one that starts later waits for the next beat and joins in step, rather
+--     than everything being restarted around it;
+--   * one that is no longer wanted plays on to the end of the beat, where the
+--     ripple has faded to nothing and the halo is at its dimmest, and stops
+--     there.
 local BEAT = 2.5
-local running = {}
+local running = {}   -- [group] = true while it plays or waits for its beat
+local ending = {}    -- [group] = what to do once it has played out
+local waiting = {}   -- [group] = a token while it waits to join
+local epoch          -- when the beat began
+local tokens = 0
+
+--- Seconds until the next beat.
+local function ToNextBeat()
+    if not epoch then return 0 end
+    return BEAT - ((GetTime() - epoch) % BEAT)
+end
 
 local function Start(group)
-    running[group] = true
-    for other in pairs(running) do
-        other:Stop()
-        other:Play()
+    if ending[group] then
+        ending[group] = nil   -- still playing, and still in step: carry on
+        return
     end
+    if running[group] then return end
+    if not next(running) then
+        epoch = GetTime()
+        running[group] = true
+        group:Play()
+        return
+    end
+    running[group] = true
+    tokens = tokens + 1
+    local token = tokens
+    waiting[group] = token
+    C_Timer.After(ToNextBeat(), function()
+        if waiting[group] ~= token then return end
+        waiting[group] = nil
+        if running[group] and not ending[group] then
+            group:Stop()
+            group:Play()
+        end
+    end)
 end
 
-local function Halt(group)
-    running[group] = nil
+--- Stops a group at the end of the beat, then calls `done`.
+local function Halt(group, done)
+    if not running[group] then
+        if done then done() end
+        return
+    end
+    if waiting[group] then
+        -- It never began: there is nothing to play out.
+        waiting[group] = nil
+        running[group] = nil
+        group:Stop()
+        if done then done() end
+        return
+    end
+    done = done or true
+    local first = ending[group] == nil
+    ending[group] = done
+    if not first then return end
+    C_Timer.After(ToNextBeat(), function()
+        local after = ending[group]
+        if not after then return end   -- wanted again in the meantime
+        ending[group] = nil
+        running[group] = nil
+        group:Stop()
+        if not next(running) then epoch = nil end
+        if after ~= true then after() end
+    end)
+end
+
+--- Fades a region out over a moment and then hides it.
+local function FadeAway(region)
+    local group = region.mbFade
+    if not group then
+        group = region:CreateAnimationGroup()
+        group.alpha = group:CreateAnimation("Alpha")
+        group.alpha:SetToAlpha(0)
+        group.alpha:SetDuration(0.5)
+        group.alpha:SetSmoothing("OUT")
+        if group.SetToFinalAlpha then group:SetToFinalAlpha(true) end
+        group:SetScript("OnFinished", function()
+            region:Hide()
+        end)
+        region.mbFade = group
+    end
+    group.alpha:SetFromAlpha(region:GetAlpha() or 0.35)
     group:Stop()
+    group:Play()
 end
 
---- Status animation for an indicator: "fast" (something is missing), "slow"
---- (a warning) or nil for a steady light. A gentle alpha pulse, nothing more.
+--- Status animation for an indicator: any mode for a pulse, nil for a steady
+--- light. A gentle alpha pulse, nothing more.
 function Theme:SetPulse(region, mode)
     if mode and not (MB.db and MB.db.appearance.statusAnimations) then
         mode = nil
@@ -336,44 +412,51 @@ function Theme:SetPulse(region, mode)
     local group = region.mbPulse
     if not mode then
         if group and region.mbPulseMode then
-            Halt(group)
+            region.mbPulseMode = nil
+            Halt(group, function() region:SetAlpha(1) end)
+        elseif not (group and ending[group]) then
+            region:SetAlpha(1)
         end
-        region.mbPulseMode = nil
-        region:SetAlpha(1)
         return
     end
     if not group then
         group = region:CreateAnimationGroup()
         group:SetLooping("BOUNCE")
         group.alpha = group:CreateAnimation("Alpha")
-        group.alpha:SetFromAlpha(0.3)   -- dim to bright, the same way round as the halo
+        group.alpha:SetFromAlpha(0.3)   -- dim to bright and back, the same way round as the halo
         group.alpha:SetToAlpha(1)
         group.alpha:SetSmoothing("IN_OUT")
+        group.alpha:SetDuration(BEAT / 2)
         region.mbPulse = group
     end
-    if region.mbPulseMode ~= mode then
-        group.alpha:SetDuration(BEAT / 2)
-        region.mbPulseMode = mode
+    if not region.mbPulseMode then
+        region.mbPulseMode = true
         Start(group)
     end
 end
 
---- A halo that breathes: it swells a little and brightens, then eases back.
---- "fast" or "slow" sets the pace; nil stops it and leaves the halo at a
---- steady glow. With status animations switched off it is always steady.
-function Theme:SetBreath(region, mode)
+--- A halo that breathes: it swells a little and brightens, then eases back,
+--- once a beat. Nil stops it at the end of the beat: with `hide` the halo then
+--- fades away, otherwise it is left at a steady glow. With status animations
+--- switched off it is always steady.
+function Theme:SetBreath(region, mode, hide)
     if mode and not (MB.db and MB.db.appearance.statusAnimations) then
         mode = nil
     end
     local group = region.mbBreath
     if not mode then
-        if group and region.mbBreathMode then
-            Halt(group)
+        local function Rest()
+            if hide then FadeAway(region) else region:SetAlpha(0.7) end
         end
-        region.mbBreathMode = nil
-        region:SetAlpha(0.7)
+        if group and region.mbBreathMode then
+            region.mbBreathMode = nil
+            Halt(group, Rest)
+        elseif not (group and ending[group]) then
+            if hide then region:Hide() else region:SetAlpha(0.7) end
+        end
         return
     end
+    if region.mbFade then region.mbFade:Stop() end
     if not group then
         group = region:CreateAnimationGroup()
         group:SetLooping("BOUNCE")
@@ -381,36 +464,38 @@ function Theme:SetBreath(region, mode)
         group.alpha:SetFromAlpha(0.35)
         group.alpha:SetToAlpha(1)
         group.alpha:SetSmoothing("IN_OUT")
-        region:SetAlpha(0.35)   -- where the breath starts, so a new loop does not jump
+        group.alpha:SetDuration(BEAT / 2)
         group.scale = group:CreateAnimation("Scale")
         if group.scale.SetScaleFrom then
             group.scale:SetScaleFrom(0.85, 0.85)
             group.scale:SetScaleTo(1.3, 1.3)
         end
         group.scale:SetSmoothing("IN_OUT")
+        group.scale:SetDuration(BEAT / 2)
         region.mbBreath = group
     end
-    if region.mbBreathMode ~= mode then
-        local duration = BEAT / 2   -- out and back in one beat, in step with the ripple
-        group.alpha:SetDuration(duration)
-        group.scale:SetDuration(duration)
-        region.mbBreathMode = mode
+    region:SetAlpha(0.35)   -- where the breath starts, so nothing jumps as it begins
+    if not region.mbBreathMode then
+        region.mbBreathMode = true
         Start(group)
     end
 end
 
---- A ring that spreads outwards and fades, again and again, like a ripple.
---- "fast" or "slow" sets how often; nil stops it and hides the ring. With
---- status animations switched off there is no ripple at all.
+--- A ring that spreads outwards and fades to nothing, once a beat, like a
+--- ripple. Nil lets the ripple in progress finish and then hides the ring.
+--- With status animations switched off there is no ripple at all.
 function Theme:SetWave(region, mode)
     if mode and not (MB.db and MB.db.appearance.statusAnimations) then
         mode = nil
     end
     local group = region.mbWave
     if not mode then
-        if group then Halt(group) end
-        region.mbWaveMode = nil
-        region:Hide()
+        if group and region.mbWaveMode then
+            region.mbWaveMode = nil
+            Halt(group, function() region:Hide() end)
+        elseif not (group and ending[group]) then
+            region:Hide()
+        end
         return
     end
     if not group then
@@ -422,22 +507,20 @@ function Theme:SetWave(region, mode)
             group.scale:SetScaleTo(2.2, 2.2)
         end
         group.scale:SetSmoothing("OUT")
+        group.scale:SetDuration(BEAT)
         group.alpha = group:CreateAnimation("Alpha")
         group.alpha:SetFromAlpha(0.8)
         group.alpha:SetToAlpha(0)
+        group.alpha:SetDuration(BEAT)
         region.mbWave = group
     end
     -- Invisible in its own right, so that it is only ever seen through the
-    -- animation. Between one loop and the next a texture shows at its own
-    -- opacity for an instant, and at full opacity that was a bright ring
-    -- snapping back onto the orb each time the ripple began again.
+    -- animation: between one loop and the next a texture shows at its own
+    -- opacity for an instant.
     region:SetAlpha(0)
     region:Show()
-    if region.mbWaveMode ~= mode then
-        local duration = BEAT       -- one unhurried pace, whatever the colour
-        group.scale:SetDuration(duration)
-        group.alpha:SetDuration(duration)
-        region.mbWaveMode = mode
+    if not region.mbWaveMode then
+        region.mbWaveMode = true
         Start(group)
     end
 end

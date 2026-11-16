@@ -761,8 +761,8 @@ function Radial:RefreshGlow()
         orb.wave:SetVertexColor(Theme:StateColor(worst))
         Theme:SetWave(orb.wave, worst == "none" and "fast" or "slow")
     else
-        Theme:SetBreath(orb.halo, nil)
-        orb.halo:Hide()
+        -- Not snatched away: each plays out its beat, and the halo then fades.
+        Theme:SetBreath(orb.halo, nil, true)
         Theme:SetWave(orb.wave, nil)
     end
 

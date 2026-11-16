@@ -339,6 +339,47 @@ function Theme:SetPulse(region, mode)
     end
 end
 
+--- A halo that breathes: it swells a little and brightens, then eases back.
+--- "fast" or "slow" sets the pace; nil stops it and leaves the halo at a
+--- steady glow. With status animations switched off it is always steady.
+function Theme:SetBreath(region, mode)
+    if mode and not (MB.db and MB.db.appearance.statusAnimations) then
+        mode = nil
+    end
+    local group = region.mbBreath
+    if not mode then
+        if group and region.mbBreathMode then
+            group:Stop()
+        end
+        region.mbBreathMode = nil
+        region:SetAlpha(0.55)
+        return
+    end
+    if not group then
+        group = region:CreateAnimationGroup()
+        group:SetLooping("BOUNCE")
+        group.alpha = group:CreateAnimation("Alpha")
+        group.alpha:SetFromAlpha(0.3)
+        group.alpha:SetToAlpha(0.8)
+        group.alpha:SetSmoothing("IN_OUT")
+        group.scale = group:CreateAnimation("Scale")
+        if group.scale.SetScaleFrom then
+            group.scale:SetScaleFrom(0.92, 0.92)
+            group.scale:SetScaleTo(1.12, 1.12)
+        end
+        group.scale:SetSmoothing("IN_OUT")
+        region.mbBreath = group
+    end
+    if region.mbBreathMode ~= mode then
+        group:Stop()
+        local duration = (mode == "fast") and 0.7 or 1.5
+        group.alpha:SetDuration(duration)
+        group.scale:SetDuration(duration)
+        region.mbBreathMode = mode
+        group:Play()
+    end
+end
+
 --- The pulse that goes with an inventory / buff state.
 function Theme:PulseForState(state)
     if state == "none" then return "fast" end

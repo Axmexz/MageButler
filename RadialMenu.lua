@@ -100,9 +100,9 @@ local function CreateOrb()
     orb.halo = orb:CreateTexture(nil, "BACKGROUND", nil, -1)
     orb.halo:SetTexture(MB.MEDIA .. "Glow.tga")
     orb.halo:SetBlendMode("ADD")
-    orb.halo:SetPoint("TOPLEFT", -10, 10)
-    orb.halo:SetPoint("BOTTOMRIGHT", 10, -10)
-    Theme:UseAccent(orb.halo, "SetVertexColor", 0.35)
+    orb.halo:SetPoint("TOPLEFT", -13, 13)
+    orb.halo:SetPoint("BOTTOMRIGHT", 13, -13)
+    orb.halo:Hide()   -- lit, coloured and set breathing by RefreshGlow, and only then
 
     orb.core = orb:CreateTexture(nil, "BACKGROUND", nil, 1)
     orb.core:SetTexture(MB.MEDIA .. "Orb.tga")
@@ -739,7 +739,18 @@ function Radial:RefreshGlow()
     local buffsNeed = buffs == "low" or buffs == "none"
     local attention = MB.db.general.enabled and (buffsNeed or supplies == "low" or supplies == "none")
 
-    orb.halo:SetShown(attention and MB.db.appearance.glow or false)
+    -- The halo takes the colour of the worst thing that needs seeing to,
+    -- yellow for running low and red for missing, and breathes: slowly for a
+    -- warning, quicker when something is missing.
+    if attention and MB.db.appearance.glow then
+        local worst = (buffs == "none" or supplies == "none") and "none" or "low"
+        orb.halo:SetVertexColor(Theme:StateColor(worst))
+        orb.halo:Show()
+        Theme:SetBreath(orb.halo, worst == "none" and "fast" or "slow")
+    else
+        Theme:SetBreath(orb.halo, nil)
+        orb.halo:Hide()
+    end
 
     if buffsNeed and MB.db.buffwatch.orbColors then
         orb.ring:SetVertexColor(Theme:StateColor(buffs))

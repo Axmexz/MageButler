@@ -32,12 +32,14 @@ local NEEDS_CLICK = { SAY = true, YELL = true }   -- outside a dungeon or raid
 local MAX_LENGTH = 255   -- the longest chat message the game takes
 local REPEAT_GUARD = 3   -- seconds in which one spell is not announced twice
 local OFFER_TIME = 20    -- how long the button waits to be clicked
+local START_GUARD = 15   -- seconds a cast announced at its start is given to finish
 
 local travel = {}        -- [spellID] = { kind, place, name } for each learned destination
 local byName = {}        -- the same entries, by the spell's name
 local refused = {}       -- [chatType] = true once the client has refused an unprompted send
 local sending            -- the chat type being sent at this instant
 local lastCast, lastSpell, lastTime
+local startedSpell, startedTime   -- a cast already announced at the click that started it
 local offer, offered
 local offerToken = 0
 
@@ -144,8 +146,13 @@ end
 function Announce:DeliveryNote()
     local channel = MB.db.announce.channel
     if channel == "SAY" or channel == "YELL" then
-        return "The game only lets an addon speak in " .. WHERE[channel]
-            .. " at your own click, except inside a dungeon or raid. Out in the world a button appears as the portal opens: click it and the message is sent."
+        local where = WHERE[channel]
+        if MB.db.announce.atStart then
+            return "In a dungeon or raid this is said by itself as the portal opens. Out in the world it is said in "
+                .. where .. " as you click the destination in MageButler's menu, before the cast has finished: if the cast then fails, it has still been said."
+        end
+        return "In a dungeon or raid this is said by itself as the portal opens. Out in the world the game only lets an addon speak in "
+            .. where .. " at your own click, so a button appears instead: click it and the message is sent."
     end
     if channel == "RAID" then
         return "Sent in raid chat as the portal opens. Nothing is said while you are not in a raid."
@@ -271,6 +278,12 @@ local function OnCast(_, _, castID, spellID)
     if not entry then return end
     if entry.kind == "teleport" and not db.teleports then return end
 
+    -- Already said, at the click that started this cast.
+    if startedSpell == spellID and GetTime() - startedTime < START_GUARD then
+        startedSpell = nil
+        return
+    end
+
     -- Once per cast, however often the client reports it.
     castID = API.Str(castID)
     local now = GetTime()
@@ -286,6 +299,39 @@ local function OnCast(_, _, castID, spellID)
 
     if Unprompted(chatType) and Send(text, chatType) then return end
     Offer(text, chatType, entry.place)
+end
+
+--- A destination has just been clicked in MageButler's own menu, and this is
+--- still inside that click. With "as I start casting" switched on, this is
+--- where /say and /yell are said out in the world: it is the only moment the
+--- game allows it without a second click. The price is that the cast has not
+--- finished, so if it then fails the words are already out. Wherever the game
+--- lets the announcement wait for the portal, it still waits.
+function Announce:OnTravelClick(spellID)
+    local db = MB.db.announce
+    if not (db.enabled and db.atStart and MB:IsActive()) then return end
+    local entry = travel[spellID]
+    if not entry or (entry.kind == "teleport" and not db.teleports) then return end
+
+    local chatType = self:ResolveChannel()
+    if not (chatType and NEEDS_CLICK[chatType]) or Locked() then return end
+    local inInstance = IsInInstance()
+    if MB.IsSecret(inInstance) or inInstance then return end
+
+    -- Not for a cast that plainly cannot start, nor twice for one cast.
+    local now = GetTime()
+    if startedSpell == spellID and now - startedTime < START_GUARD then return end
+    if MB.inventoryKnown and MB.Reagents:Count(entry.kind == "portal" and "runeP" or "runeT") <= 0 then return end
+    if C_Spell and C_Spell.IsSpellUsable then
+        local ok, usable = pcall(C_Spell.IsSpellUsable, spellID)
+        if ok and not MB.IsSecret(usable) and usable == false then return end
+    end
+
+    local template = (entry.kind == "teleport") and db.teleportText or db.startText
+    local text = self:Format(template, entry.place, entry.name)
+    if text ~= "" and Send(text, chatType) then
+        startedSpell, startedTime = spellID, now
+    end
 end
 
 -------------------------------------------------------------------------------

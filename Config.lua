@@ -131,6 +131,8 @@ Config.defaults = {
         text = "Your personal MageButler has opened a portal to {portal}. Tips are appreciated, complaints go straight to the gnome!",
         teleports = false,       -- say so for the player's own teleports as well
         teleportText = "{player} is teleporting to {portal}.",
+        atStart = false,         -- in /say and /yell out in the world: say it at the click that starts the cast
+        startText = "Opening a portal to {portal}.",
     },
     appearance = {
         accent = "arcane",

@@ -345,9 +345,14 @@ local function CreateRow(sub, index)
     row:HookScript("OnLeave", function()
         GameTooltip:Hide()
     end)
-    row:SetScript("PostClick", function(_, _, down)
-        -- The cast happens on release; close the menu after it when allowed.
-        if down or not MB.db.radial.closeAfterTravel or InCombatLockdown() then return end
+    row:SetScript("PostClick", function(self, _, down)
+        -- The cast happens on release.
+        if down then return end
+        -- Still inside the player's own click, which is the one moment an
+        -- announcement in /say or /yell may be made out in the world.
+        if self.spellID then MB.Announce:OnTravelClick(self.spellID) end
+        -- Close the menu after it when allowed.
+        if not MB.db.radial.closeAfterTravel or InCombatLockdown() then return end
         menu:Hide()
     end)
 

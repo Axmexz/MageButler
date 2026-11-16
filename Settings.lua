@@ -741,7 +741,7 @@ builders.announce = function(page)
     local function Preview(y, kind)
         Label(page, 0, y, "Preview", 10, "dim")
         local text = Label(page, 0, y - 15, "", 11)
-        text:SetSize(PAGE_WIDTH, 40)
+        text:SetSize(PAGE_WIDTH, 28)
         text:SetJustifyV("TOP")
         text:SetWordWrap(true)
         text:SetSpacing(2)
@@ -762,26 +762,34 @@ builders.announce = function(page)
         "Where the announcement is said. Party and raid chat only reach your group, and nothing is said when the channel would reach nobody.",
         Announce.CHANNELS, Field("announce", announce, "channel"))
 
-    Label(page, 0, -62, "Message", 10, "dim")
-    local showPortal = Preview(-108, "portal")
-    TextBox(page, 0, -78, PAGE_WIDTH, "Portal message",
+    Label(page, 0, -58, "Message", 10, "dim")
+    local showPortal = Preview(-102, "portal")
+    TextBox(page, 0, -74, PAGE_WIDTH, "Portal message",
         "What is said when one of your portals opens. {portal} becomes the destination, {player} your name and {spell} the spell's full name. Empty the box to get the standard text back.",
         200, showPortal, Message("text"))
 
-    Checkbox(page, 0, -178, "Announce my own teleports too",
+    Checkbox(page, 0, -154, "Announce my own teleports too",
         "Also says so when you teleport yourself. Off, only portals are announced.",
         Field("announce", announce, "teleports"))
-    Label(page, 0, -208, "Teleport message", 10, "dim")
-    local showTeleport = Preview(-254, "teleport")
-    TextBox(page, 0, -224, PAGE_WIDTH, "Teleport message",
+    Label(page, 0, -180, "Teleport message", 10, "dim")
+    local showTeleport = Preview(-224, "teleport")
+    TextBox(page, 0, -196, PAGE_WIDTH, "Teleport message",
         "What is said when you teleport yourself, if that is switched on. The same placeholders work here.",
         200, showTeleport, Message("teleportText"))
 
-    local delivery = Note(page, -326, "")
+    Checkbox(page, 0, -276, "In /say and /yell, announce as I start casting",
+        "Out in the world the game only lets an addon speak in /say or /yell at your own click. Ticked, the announcement is made at the click on a destination in MageButler's menu, with no button to press afterwards. It is said before the cast has finished, so a cast that then fails has still been announced. A portal cast any other way is offered as a button, as before.",
+        Field("announce", announce, "atStart"))
+    Label(page, 0, -302, "Message as the cast starts", 10, "dim")
+    TextBox(page, 0, -318, PAGE_WIDTH, "Message as the cast starts",
+        "What is said at that click, for a portal. A teleport uses its own message above. The same placeholders work here.",
+        200, nil, Message("startText"))
+
+    local delivery = Note(page, -350, "")
     refreshers[#refreshers + 1] = function()
         delivery:SetText(Announce:DeliveryNote())
     end
-    Note(page, -384, "{portal} is the destination, {player} is you and {spell} is the spell's full name. Colour codes and line breaks cannot be sent in chat and are left out, and a message is cut at 255 characters.")
+    Note(page, -404, "{portal} is the destination, {player} is you, {spell} the spell's full name. Colour codes and line breaks are left out, and a message is cut at 255 characters.")
 end
 
 builders.appearance = function(page)

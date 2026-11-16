@@ -1004,7 +1004,7 @@ end
 
 local function CreateWelcome()
     welcome = Theme:CreatePanel("MageButlerWelcome", UIParent, "bg")
-    welcome:SetSize(372, WELCOME_HEIGHT)
+    welcome:SetSize(416, WELCOME_HEIGHT)
     welcome:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
     welcome:SetFrameStrata("DIALOG")
     welcome:SetClampedToScreen(true)
@@ -1034,7 +1034,7 @@ local function CreateWelcome()
 
     local intro = Theme:Text(welcome, 12)
     intro:SetPoint("TOPLEFT", 16, -54)
-    intro:SetWidth(340)
+    intro:SetWidth(384)
     intro:SetJustifyH("LEFT")
     intro:SetWordWrap(true)
     intro:SetSpacing(3)
@@ -1042,7 +1042,7 @@ local function CreateWelcome()
 
     local clicks = Theme:Text(welcome, 12)
     clicks:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 6, -12)
-    clicks:SetWidth(334)
+    clicks:SetWidth(378)
     clicks:SetJustifyH("LEFT")
     clicks:SetSpacing(5)
     local accent = Theme:AccentHex()
@@ -1054,7 +1054,7 @@ local function CreateWelcome()
 
     local closing = Theme:Text(welcome, 11)
     closing:SetPoint("TOPLEFT", clicks, "BOTTOMLEFT", -6, -14)
-    closing:SetWidth(340)
+    closing:SetWidth(384)
     closing:SetJustifyH("LEFT")
     closing:SetWordWrap(true)
     closing:SetSpacing(3)
@@ -1113,7 +1113,7 @@ local function CreateWelcome()
         local function item() return MB.db.reagents.items[key] end
         local get, set = Field("reagents", item, "warn")
         local name = MB.Reagents:Name(key)
-        local box = NumberBox(choices, 12 + 168 + 138, -45 - (row - 1) * 24, 34, name .. ": warn at",
+        local box = NumberBox(choices, 12 + 168 + 166, -45 - (row - 1) * 24, 34, name .. ": warn at",
             "With this many " .. name .. " or fewer the orb turns yellow and starts to pulse; with none left it turns red. How many to restock up to is set on the Reagents page.",
             0, 200, get, set)
         welcomeChecks[#welcomeChecks + 1] = function()

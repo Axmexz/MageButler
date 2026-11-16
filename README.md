@@ -55,7 +55,12 @@ and the trade assistant. Portals and teleports list only the destinations you
 have actually learned.
 
 `/mb` opens the settings. It also takes `menu`, `orb`, `ready`, `buffs`,
-`fill` and `reset`; `/mb` on its own lists them. `/magebutler` works too.
+`fill`, `reset` and `debug`; `/mb help` lists them. `/magebutler` works too.
+
+If a counter ever looks wrong, `/mb debug` prints what MageButler has counted
+beside what the game reports at that moment, with a short history of how it got
+there. It survives a `/reload`, so it is worth pasting into a bug report even
+after you have reloaded to clear the problem.
 
 Every spell is cast by your own click. MageButler never casts for you, and it
 never accepts a trade for you.

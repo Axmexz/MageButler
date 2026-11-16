@@ -117,7 +117,7 @@ local function ChooseRank(kind, maxLevel)
     local tooHigh = false
     for i = 1, #items do
         local itemID = items[i]
-        if API.ItemCount(itemID) > 0 then
+        if MB:CountOf(itemID) > 0 then
             if maxLevel and MB.Conjuring:MinLevel(itemID) > maxLevel then
                 tooHigh = true
             else
@@ -395,6 +395,8 @@ end
 
 local function StartJob(manual)
     if job or not tradeOpen then return end
+    -- Which rank is carried comes from the counts, so they are read afresh.
+    MB:RefreshInventory(false, "trade")
     local wantWater, wantFood = Trade:GetAmounts()
 
     local water, food = Offered()

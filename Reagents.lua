@@ -23,6 +23,12 @@ Reagents.MIN_LEVEL = { runeT = 20, runeP = 40, powder = 56 }
 
 local POPUP = "MAGEBUTLER_RESTOCK"
 
+-- Read by the core, in one pass with the conjured items, and only while the
+-- bags can be seen to answer.
+for _, key in ipairs(Reagents.ORDER) do
+    MB:TrackItem(Reagents.ITEMS[key])
+end
+
 local counts = {}
 local warned = {}
 local merchantOpen = false
@@ -74,55 +80,58 @@ function Reagents:State(key)
     return "ok"
 end
 
--- A count that only dips for a moment - a stale read around a zone change, a
--- rune spent on the cast that started a loading screen - must not raise a
--- warning, so a shortage is checked again before anything is said.
+-- A count that only dips for a moment - a rune spent on the cast that started
+-- a loading screen - must not raise a warning, so a shortage is looked at
+-- again before anything is said.
 local WARN_CONFIRM = 1.5
 local pending = {}
+local confirming = false
 
+--- Takes the counts the core last read.
 local function ReadCounts()
     for _, key in ipairs(Reagents.ORDER) do
-        counts[key] = API.ItemCount(Reagents.ITEMS[key])
+        counts[key] = MB:CountOf(Reagents.ITEMS[key])
     end
 end
 
---- Raises the warnings that are still true a moment later.
-local function ConfirmWarnings()
-    ReadCounts()
-    local low = {}
-    for _, key in ipairs(Reagents.ORDER) do
-        local state = Reagents:State(key)
-        if state ~= "low" and state ~= "none" then
-            warned[key] = nil
-        elseif pending[key] and not warned[key] and not merchantOpen then
-            warned[key] = true
-            low[#low + 1] = Reagents:Name(key) .. " (" .. counts[key] .. ")"
-        end
-    end
-    wipe(pending)
-    if #low > 0 and MB:IsActive() then
-        MB:Notify("Low on " .. table.concat(low, ", ") .. ".", "warn")
-    end
+--- The second look. It asks the core for a fresh read like everything else,
+--- so it cannot land on bags that are not answering and take their silence
+--- for a shortage. If they are not answering nothing is decided: the refresh
+--- that follows their return finds the shortage still there and starts this
+--- again.
+local function Confirm()
+    confirming = true
+    MB:RefreshInventory(false, "second look")
+    confirming = false
 end
 
 function Reagents:RefreshInventory()
     ReadCounts()
-    local check = false
+    local check, low = false, nil
     for _, key in ipairs(self.ORDER) do
         local state = self:State(key)
-        if state == "low" or state == "none" then
-            -- Standing at a vendor is not the moment to be told.
-            if not warned[key] and not merchantOpen then
-                pending[key] = true
-                check = true
-            end
-        else
+        if state ~= "low" and state ~= "none" then
             warned[key] = nil
             pending[key] = nil
+        elseif confirming then
+            -- Still short a moment later: raised once, and not at a vendor,
+            -- which is no moment to be told.
+            if pending[key] and not warned[key] and not merchantOpen then
+                warned[key] = true
+                low = low or {}
+                low[#low + 1] = self:Name(key) .. " (" .. counts[key] .. ")"
+            end
+            pending[key] = nil
+        elseif not warned[key] and not merchantOpen then
+            pending[key] = true
+            check = true
         end
     end
+    if low and MB:IsActive() then
+        MB:Notify("Low on " .. table.concat(low, ", ") .. ".", "warn")
+    end
     if check then
-        MB:Debounce("reagent-warning", WARN_CONFIRM, ConfirmWarnings)
+        MB:Debounce("reagent-warning", WARN_CONFIRM, Confirm)
     end
 end
 
@@ -193,7 +202,7 @@ local function BuildPlan()
         local config = MB.db.reagents.items[key]
         if Reagents:IsTracked(key) then
             local itemID = Reagents.ITEMS[key]
-            local have = API.ItemCount(itemID)
+            local have = MB:CountOf(itemID)
             local wanted = config.target - have
             local index = wanted > 0 and FindMerchantIndex(itemID) or nil
             local price, bundle, available, purchasable
@@ -269,10 +278,15 @@ end
 
 --- Reports what actually arrived in the bags, not what was requested.
 local function ReportPurchase(entries)
+    -- Counted afresh; if the bags cannot answer just now, once they can.
+    if not MB:RefreshInventory(false, "purchase") then
+        MB:AfterInventory(function() ReportPurchase(entries) end)
+        return
+    end
     local parts, total, short = {}, 0, false
     for i = 1, #entries do
         local entry = entries[i]
-        local gained = API.ItemCount(entry.itemID) - entry.have
+        local gained = MB:CountOf(entry.itemID) - entry.have
         if gained > 0 then
             parts[#parts + 1] = gained .. " " .. Reagents:Name(entry.key)
             total = total + entry.unit * gained
@@ -321,6 +335,13 @@ local function TryRestock()
     if not merchantOpen or visitDone then return end
     if not MB:IsActive() or not MB.db.reagents.enabled then return end
     if API.Num(GetMerchantNumItems(), 0) == 0 then return end -- retried on MERCHANT_UPDATE
+    -- What to buy depends on what is carried, so that is counted afresh, and
+    -- nothing is bought on counts that cannot be believed: a reagent wrongly
+    -- read as none would be bought all over again.
+    if not MB:RefreshInventory(false, "merchant") then
+        MB:AfterInventory(TryRestock)
+        return
+    end
     visitDone = true
 
     local plan, notes = BuildPlan()
@@ -384,11 +405,11 @@ function Reagents:OnEnable()
 
     -- Which reagents matter depends on the spells known and the level reached.
     MB:On("SPELLS_UPDATED", function()
-        MB:RefreshInventory()
+        MB:RefreshInventory(true, "spells")
     end)
     MB:RegisterEvent("PLAYER_LEVEL_UP", function()
         MB:Debounce("reagent-level", 1, function()
-            MB:RefreshInventory()
+            MB:RefreshInventory(true, "level")
             MB:Fire("SETTINGS_CHANGED", "reagents")
         end)
     end)

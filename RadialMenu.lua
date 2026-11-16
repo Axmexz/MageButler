@@ -57,6 +57,7 @@ local subs = {}
 -- Orb
 -------------------------------------------------------------------------------
 local function OrbTooltip(self)
+    MB:RefreshInventory(false, "tooltip")   -- the preparation lines below are counts
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     local r, g, b = Theme:Accent()
     GameTooltip:AddLine("MageButler", r, g, b)
@@ -234,6 +235,9 @@ local function CreateMenu()
             self.fade:Stop()
             self.fade:Play()
         end
+        -- The moment the counts are looked at: read them now, so the menu
+        -- shows what is in the bags even if a bag update went missing.
+        MB:RefreshInventory(false, "menu")
         Radial:RefreshVisuals()
     end)
 

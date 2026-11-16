@@ -29,6 +29,13 @@ for _, itemID in ipairs(WATER) do kindOf[itemID] = "water" end
 for _, itemID in ipairs(FOOD) do kindOf[itemID] = "food" end
 for _, itemID in ipairs(SHARED) do kindOf[itemID] = "both" end
 
+-- Everything counted here is read by the core, in one pass with the reagents,
+-- and only while the bags can be seen to answer.
+for _, list in ipairs({ WATER, FOOD, SHARED }) do
+    for i = 1, #list do MB:TrackItem(list[i]) end
+end
+for i = 1, #MB.Spells.GEMS do MB:TrackItem(MB.Spells.GEMS[i].item) end
+
 local counts = { water = 0, food = 0, gem = 0 }
 local bestItem = {}
 local lastState = {}
@@ -43,18 +50,20 @@ local lastState = {}
 --- check claim more than the player really had.
 local function CountBest(list)
     for i = #list, 1, -1 do
-        local n = API.ItemCount(list[i])
+        local n = MB:CountOf(list[i])
         if n > 0 then return n, list[i] end
     end
     return 0, nil
 end
 
--- A count that only dips for a moment - a stale read around a zone change, an
--- item in flight during a trade - must not raise a warning, so a supply that
--- reads empty is checked again before anything is said.
+-- A count that only dips for a moment - an item in flight during a trade -
+-- must not raise a warning, so a supply that reads empty is looked at again
+-- before anything is said.
 local WARN_CONFIRM = 1.5
 local pending = {}
+local confirming = false
 
+--- Works the totals out from the counts the core last read.
 local function ReadCounts()
     local shared, sharedBest = CountBest(SHARED)
     local water, waterBest = CountBest(WATER)
@@ -69,7 +78,7 @@ local function ReadCounts()
     local gems, gemBest = 0, nil
     for i = 1, #MB.Spells.GEMS do
         local itemID = MB.Spells.GEMS[i].item
-        local n = API.ItemCount(itemID)
+        local n = MB:CountOf(itemID)
         if n > 0 then
             gems = gems + n
             gemBest = itemID
@@ -79,18 +88,15 @@ local function ReadCounts()
     bestItem.gem = gemBest
 end
 
---- Says what is still empty a moment after it first read empty.
-local function ConfirmMissing()
-    ReadCounts()
-    for kind, label in pairs(LABEL) do
-        local state = Conjuring:State(kind)
-        if pending[kind] and state == "none"
-            and MB:IsActive() and MB.db.conjuring.warnMissing then
-            MB:Notify("Out of conjured " .. label .. ".", "warn")
-        end
-        lastState[kind] = state   -- trusted now, whichever way it went
-    end
-    wipe(pending)
+--- The second look. It asks the core for a fresh read like everything else,
+--- so it cannot land on bags that are not answering and take their silence
+--- for empty shelves. If they are not answering nothing is decided: the
+--- refresh that follows their return finds the supply still short and starts
+--- this again.
+local function Confirm()
+    confirming = true
+    MB:RefreshInventory(false, "second look")
+    confirming = false
 end
 
 function Conjuring:RefreshInventory()
@@ -98,21 +104,28 @@ function Conjuring:RefreshInventory()
 
     -- One warning at the moment a supply runs out, not on every bag update.
     local check = false
-    for kind in pairs(LABEL) do
+    for kind, label in pairs(LABEL) do
         local state = self:State(kind)
-        if state == "none" then
-            -- Left for ConfirmMissing to judge, so lastState keeps the edge.
+        if state ~= "none" then
+            lastState[kind] = state
+            pending[kind] = nil
+        elseif confirming then
+            -- Still empty a moment later: trusted now, and said once.
+            if pending[kind] and MB:IsActive() and MB.db.conjuring.warnMissing then
+                MB:Notify("Out of conjured " .. label .. ".", "warn")
+            end
+            lastState[kind] = state
+            pending[kind] = nil
+        elseif lastState[kind] ~= "none" then
+            -- Left for the second look to judge, so lastState keeps the edge.
             if lastState[kind] == "ok" or lastState[kind] == "low" then
                 pending[kind] = true
             end
             check = true
-        else
-            lastState[kind] = state
-            pending[kind] = nil
         end
     end
     if check then
-        MB:Debounce("conjuring-warning", WARN_CONFIRM, ConfirmMissing)
+        MB:Debounce("conjuring-warning", WARN_CONFIRM, Confirm)
     end
 end
 
@@ -189,7 +202,7 @@ function Conjuring:GetGemCast()
         local spellID = spells:GemSpell(i)
         if spellID then
             strongest = strongest or spellID
-            if API.ItemCount(spells.GEMS[i].item) == 0 then
+            if MB:CountOf(spells.GEMS[i].item) == 0 then
                 return spellID, false
             end
         end

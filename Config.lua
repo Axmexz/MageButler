@@ -102,7 +102,7 @@ Config.defaults = {
         raidThreshold = 6,
         preferBrilliance = true,
         fallbackIntellect = true,
-        acceptLowerRanks = true,
+        upgradeWeaker = true,    -- a weaker rank than the Mage could give counts as needing a rebuff
         matchLevel = true,
         scope = "auto",          -- what Arcane Brilliance covers: "auto", "group" or "raid"
         watchExpiry = true,
@@ -223,16 +223,25 @@ local function MigrateTrade(profile)
     trade.presets, trade.classes, trade.classAware = nil, nil, nil
 end
 
---- The inventory HUD was removed. Its stored position, its per-counter list and
---- the two settings that drove it are dropped so a profile written by an older
---- version does not carry them around for ever.
-local function DropHUD(profile)
+--- Settings that no longer exist are dropped, so a profile written by an
+--- older version does not carry them around for ever.
+---   * The inventory HUD was removed: its stored position, its per-counter
+---     list and the two settings that drove it.
+---   * "Accept lower ranks" became "Upgrade weaker ranks", and what used to
+---     be switched off out of the box is now switched on. The old setting is
+---     not carried over: a profile cannot say whether it held the old default
+---     or a choice, and the old default is what let a weaker rank from another
+---     Mage pass as everyone being buffed.
+local function DropRetired(profile)
     profile.hud = nil
     if type(profile.general) == "table" then
         profile.general.showHUD = nil
     end
     if type(profile.appearance) == "table" then
         profile.appearance.hudLabels = nil
+    end
+    if type(profile.buffwatch) == "table" then
+        profile.buffwatch.acceptLowerRanks = nil
     end
 end
 
@@ -253,7 +262,7 @@ function Config:Init()
         root.chars[self.key] = {}
     end
     MigrateTrade(root.chars[self.key])
-    DropHUD(root.chars[self.key])
+    DropRetired(root.chars[self.key])
     MB.db = ApplyDefaults(root.chars[self.key], self.defaults)
 end
 
@@ -279,7 +288,7 @@ function Config:CopyFrom(key)
     if type(source) ~= "table" or key == self.key then return false end
     local copy = DeepCopy(source)
     MigrateTrade(copy)
-    DropHUD(copy)
+    DropRetired(copy)
     self.root.chars[self.key] = copy
     MB.db = ApplyDefaults(copy, self.defaults)
     MB:Fire("SETTINGS_CHANGED", "all")

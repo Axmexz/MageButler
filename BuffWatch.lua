@@ -1,9 +1,9 @@
 -- MageButler - Copyright (c) 2026 Padre Pidisc. All rights reserved. See LICENSE.txt.
 -- MageButler: Buff Watch.
--- Watches the Mage, the party or the raid (up to 40 players) for missing or
--- expiring Arcane Intellect / Arcane Brilliance and works out the cheapest
--- useful cast. Right-clicking the orb casts that one spell: every cast is a
--- single secure click by the player, never a sequence.
+-- Watches the Mage, the party or the raid (up to 40 players) for missing,
+-- weaker or expiring Arcane Intellect / Arcane Brilliance and works out the
+-- cheapest useful cast. Right-clicking the orb casts that one spell: every
+-- cast is a single secure click by the player, never a sequence.
 --
 -- Aura data is read only outside combat. In combat the last picture is kept,
 -- the orb's buff click is switched off, and the player list (fixed unit
@@ -58,7 +58,7 @@ local state = {
     active = false,
     paused = false,
     context = "solo",
-    total = 0, ok = 0, expiring = 0, missing = 0, unreadable = 0, outOfRange = 0,
+    total = 0, ok = 0, expiring = 0, weak = 0, missing = 0, unreadable = 0, outOfRange = 0,
     overall = "off",
     units = {},
     byUnit = {},
@@ -169,7 +169,7 @@ local function ReadBuff(unit)
                 remaining = expires - GetTime()
             end
             local spellID = API.Num(aura.spellId)
-            return "buffed", remaining, spellID and STRENGTH[spellID] or nil
+            return "buffed", remaining, spellID and STRENGTH[spellID] or nil, spellID
         end
     end
     return "missing"
@@ -250,7 +250,7 @@ end
 local function ResetCounts()
     wipe(state.units)
     wipe(state.byUnit)
-    state.total, state.ok, state.expiring, state.missing = 0, 0, 0, 0
+    state.total, state.ok, state.expiring, state.weak, state.missing = 0, 0, 0, 0, 0
     state.unreadable, state.outOfRange = 0, 0
     state.action, state.note = nil, nil
 end
@@ -296,7 +296,7 @@ local function Evaluate()
             if excluded then
                 state.byUnit[unit] = "excluded"
             else
-                local found, remaining, strength = ReadBuff(unit)
+                local found, remaining, strength, auraSpell = ReadBuff(unit)
                 if found == "unknown" then
                     state.unreadable = state.unreadable + 1
                     state.byUnit[unit] = "unknown"
@@ -307,11 +307,16 @@ local function Evaluate()
                     local cast = RankForLevel("intellect", level)
                     local castStrength = STRENGTH[cast]
 
+                    -- "weak" is buffed, but at a lower rank than the Mage
+                    -- could give this player: what another, lower-level Mage
+                    -- leaves behind. It is judged against the rank their
+                    -- level can take, so the best a low-level player can
+                    -- hold is never held against them.
                     local status = "ok"
                     if found == "missing" then
                         status = "missing"
-                    elseif not db.acceptLowerRanks and strength and castStrength and strength < castStrength then
-                        status = "missing" -- weaker than the rank this player could have
+                    elseif db.upgradeWeaker and strength and castStrength and strength < castStrength then
+                        status = "weak"
                     elseif rebuff and remaining and remaining < rebuff then
                         status = "expiring"
                     end
@@ -337,6 +342,8 @@ local function Evaluate()
                     record.cast = cast
                     record.reachable = Reachable(unit, cast or intellect)
                     record.subgroup = subgroup or 1
+                    record.aura = auraSpell      -- the buff they carry, when it could be read
+                    record.strength = strength   -- nil when its rank is not one that is known
                     state.units[#state.units + 1] = record
                     state.byUnit[unit] = record
                     state.total = state.total + 1
@@ -353,20 +360,24 @@ local function Evaluate()
         state.overall = "off"
     elseif state.missing > 0 then
         state.overall = "none"
-    elseif state.expiring > 0 then
+    elseif state.weak > 0 or state.expiring > 0 then
         state.overall = "low"
     else
         state.overall = "ok"
     end
 end
 
---- Players who need the buff, in the order they should be served.
+--- Players who need the buff, in the order they should be served: those with
+--- none first, then those carrying a weaker rank than they could have, which
+--- is short for as long as it lasts, then those whose buff is running out.
 local function Needs()
-    local missing, expiring = {}, {}
+    local missing, weak, expiring = {}, {}, {}
     for i = 1, #state.units do
         local record = state.units[i]
         if record.status == "missing" then
             missing[#missing + 1] = record
+        elseif record.status == "weak" then
+            weak[#weak + 1] = record
         elseif record.status == "expiring" then
             expiring[#expiring + 1] = record
         end
@@ -378,6 +389,7 @@ local function Needs()
     local needs = {}
     if MB.db.buffwatch.missingFirst then
         for i = 1, #missing do needs[#needs + 1] = missing[i] end
+        for i = 1, #weak do needs[#needs + 1] = weak[i] end
         for i = 1, #expiring do needs[#needs + 1] = expiring[i] end
     else
         -- Roster order, whatever the reason.
@@ -500,12 +512,20 @@ end
 -------------------------------------------------------------------------------
 -- Display
 -------------------------------------------------------------------------------
+--- How many of those watched carry Intellect at all, whatever its rank and
+--- however long it has left.
+local function Buffed()
+    return state.ok + state.expiring + state.weak
+end
+
 local function Headline()
     if state.paused then
         return InCombatLockdown() and "Paused in combat" or "Paused (buffs cannot be read here)"
     end
     if state.overall == "ok" then return "Everyone is buffed" end
-    if state.overall == "low" then return "Buffs expiring soon" end
+    if state.overall == "low" then
+        return state.weak > 0 and "Weaker buffs to upgrade" or "Buffs expiring soon"
+    end
     if state.overall == "none" then return "Players missing Intellect" end
     return "Nothing to watch"
 end
@@ -521,7 +541,7 @@ local function StatusColor(record)
         return Theme:Color("off")
     end
     if record.status == "missing" then return Theme:Color("bad") end
-    if record.status == "expiring" then return Theme:Color("warn") end
+    if record.status == "expiring" or record.status == "weak" then return Theme:Color("warn") end
     return Theme:Color("ok")
 end
 
@@ -550,7 +570,7 @@ local function RefreshList()
         LIST_HEADER + rows * (CELL_HEIGHT + CELL_GAP) + LIST_FOOTER + LIST_PAD)
 
     if state.active and state.total > 0 then
-        listPanel.coverage:SetText((state.ok + state.expiring) .. "/" .. state.total .. " buffed")
+        listPanel.coverage:SetText(Buffed() .. "/" .. state.total .. " buffed")
         listPanel.coverage:SetTextColor(Theme:StateColor(state.overall))
     else
         listPanel.coverage:SetText(state.paused and "paused" or "")
@@ -583,7 +603,7 @@ function BuffWatch:RefreshVisuals()
 
     if counter then
         if watching and db.showCounter and state.active and state.context ~= "solo" and state.total > 0 then
-            counter:SetText((state.ok + state.expiring) .. "/" .. state.total)
+            counter:SetText(Buffed() .. "/" .. state.total)
             counter:SetTextColor(Theme:StateColor(overall))
             counter:Show()
         else
@@ -596,7 +616,7 @@ end
 
 --- Buffed and watched player counts, for the preparation check.
 function BuffWatch:GetCoverage()
-    return state.ok + state.expiring, state.total
+    return Buffed(), state.total
 end
 
 --- "ok", "low" (expiring), "none" (missing), or "off".
@@ -627,6 +647,9 @@ function BuffWatch:AddTooltipLines(tooltip)
     if state.expiring > 0 then
         tooltip:AddDoubleLine("Expiring soon", state.expiring, 0.88, 0.92, 1, Theme:Color("warn"))
     end
+    if state.weak > 0 then
+        tooltip:AddDoubleLine("Weaker rank", state.weak, 0.88, 0.92, 1, Theme:Color("warn"))
+    end
     if state.outOfRange > 0 then
         tooltip:AddDoubleLine("Out of range", state.outOfRange, 0.88, 0.92, 1, Theme:Color("off"))
     end
@@ -642,7 +665,7 @@ function BuffWatch:AddTooltipLines(tooltip)
         tooltip:AddLine(state.note, 0.56, 0.63, 0.79, true)
     end
 
-    if db.tooltipNames and (state.missing > 0 or state.expiring > 0) then
+    if db.tooltipNames and (state.missing > 0 or state.weak > 0 or state.expiring > 0) then
         local names, more = {}, 0
         for i = 1, #state.units do
             local record = state.units[i]
@@ -831,6 +854,14 @@ local function UnitTooltip(self)
         GameTooltip:AddLine("Buffs could not be read.", 0.56, 0.63, 0.79)
     elseif record.status == "missing" then
         GameTooltip:AddLine("Missing Intellect", 1, 0.35, 0.35)
+    elseif record.status == "weak" then
+        local has = RankNumber("intellect", record.aura)
+        local can = record.cast and RankNumber("intellect", record.cast)
+        if has and can then
+            GameTooltip:AddLine("Has Rank " .. has .. ", and you can give Rank " .. can, 1, 0.75, 0.25)
+        else
+            GameTooltip:AddLine("A weaker rank than you can give them", 1, 0.75, 0.25)
+        end
     elseif record.status == "expiring" then
         GameTooltip:AddLine("Expires in " .. math.ceil((record.remaining or 0) / 60) .. " min", 1, 0.75, 0.25)
     elseif record.remaining then
@@ -841,6 +872,12 @@ local function UnitTooltip(self)
     if type(record) == "table" then
         if not record.reachable then
             GameTooltip:AddLine("Out of range", 0.56, 0.63, 0.79)
+        end
+        -- Said rather than left unsaid: a buff whose rank cannot be told is
+        -- taken as good enough, and that is why no upgrade is offered.
+        if record.status ~= "missing" and not record.strength and MB.db.buffwatch.upgradeWeaker then
+            GameTooltip:AddLine("The rank of this buff could not be told, so it is not compared with yours.",
+                0.56, 0.63, 0.79, true)
         end
         local rank = record.cast and RankNumber("intellect", record.cast)
         if rank and record.level and record.cast ~= Spells:GetBest("intellect") then

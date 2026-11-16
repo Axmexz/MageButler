@@ -516,7 +516,7 @@ builders.buffwatch = function(page)
         "Watches you and your group for missing or expiring Arcane Intellect and Arcane Brilliance. Right-click the orb to cast the recommended buff.",
         Field("buffwatch", watch, "enabled"))
     Checkbox(page, RIGHT, -28, "Orb status indicator",
-        "A pip on the orb: green when everyone is buffed, yellow when buffs are expiring, red when players are missing Intellect, grey when there is nothing to watch.",
+        "A pip on the orb: green when everyone is buffed, yellow when buffs are expiring or a stronger rank could be given, red when players are missing Intellect, grey when there is nothing to watch.",
         Field("buffwatch", watch, "orbIndicator"))
     Checkbox(page, 0, -52, "Watch in parties", "Monitor party members.", Field("buffwatch", watch, "party"))
     Checkbox(page, RIGHT, -52, "Watch in raids", "Monitor every raid member, up to 40 players.", Field("buffwatch", watch, "raid"))
@@ -535,8 +535,9 @@ builders.buffwatch = function(page)
         Field("buffwatch", watch, "preferBrilliance"))
     Checkbox(page, RIGHT, -162, "Fall back to Arcane Intellect", "Without Arcane Powder, buff players one at a time instead of doing nothing.",
         Field("buffwatch", watch, "fallbackIntellect"))
-    Checkbox(page, 0, -186, "Accept lower ranks", "Treat any rank of Arcane Intellect or Arcane Brilliance as buffed. Turn this off to flag anyone carrying a weaker rank than they could have.",
-        Field("buffwatch", watch, "acceptLowerRanks"))
+    Checkbox(page, 0, -186, "Upgrade weaker ranks",
+        "Counts a player carrying a weaker rank of Intellect than you could give them as needing a rebuff, as when a lower-level Mage has buffed the group. Turn this off to treat any rank as good enough.",
+        Field("buffwatch", watch, "upgradeWeaker"))
     Checkbox(page, 0, -210, "Match the player's level",
         "Buffs a low-level player with the strongest rank their level can receive, instead of your own best rank, which the game would refuse. Turn this off to always cast your highest rank.",
         Field("buffwatch", watch, "matchLevel"))

@@ -148,8 +148,8 @@ function Announce:DeliveryNote()
     if channel == "SAY" or channel == "YELL" then
         local where = WHERE[channel]
         if MB.db.announce.atStart then
-            return "In a dungeon or raid this is said by itself as the portal opens. Out in the world it is said in "
-                .. where .. " as you click the destination in MageButler's menu, before the cast has finished: if the cast then fails, it has still been said."
+            return "In a dungeon or raid this is said as the portal opens. Out in the world it is said in "
+                .. where .. " as you click the destination in MageButler's menu, before the cast has finished."
         end
         return "In a dungeon or raid this is said by itself as the portal opens. Out in the world the game only lets an addon speak in "
             .. where .. " at your own click, so a button appears instead: click it and the message is sent."
@@ -301,6 +301,27 @@ local function OnCast(_, _, castID, spellID)
     Offer(text, chatType, entry.place)
 end
 
+--- Whether a cast clicked at this instant will actually begin. A click while
+--- the spell or the global cooldown is still running, while another spell is
+--- being cast, or while moving, casts nothing, and must announce nothing.
+--- Where the client will not say, the answer is no: better a button to click
+--- when the portal opens than words for a portal that never came.
+local function CanStartNow(spellID)
+    if C_Spell and C_Spell.GetSpellCooldown then
+        local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
+        if not ok or MB.IsSecret(info) then return false end
+        if type(info) == "table" then
+            local duration = info.duration
+            if MB.IsSecret(duration) then return false end
+            if type(duration) == "number" and duration > 0 then return false end
+        end
+    end
+    if UnitCastingInfo and UnitCastingInfo("player") then return false end
+    if UnitChannelInfo and UnitChannelInfo("player") then return false end
+    if IsPlayerMoving and IsPlayerMoving() then return false end
+    return true
+end
+
 --- A destination has just been clicked in MageButler's own menu, and this is
 --- still inside that click. With "as I start casting" switched on, this is
 --- where /say and /yell are said out in the world: it is the only moment the
@@ -326,6 +347,7 @@ function Announce:OnTravelClick(spellID)
         local ok, usable = pcall(C_Spell.IsSpellUsable, spellID)
         if ok and not MB.IsSecret(usable) and usable == false then return end
     end
+    if not CanStartNow(spellID) then return end
 
     local template = (entry.kind == "teleport") and db.teleportText or db.startText
     local text = self:Format(template, entry.place, entry.name)

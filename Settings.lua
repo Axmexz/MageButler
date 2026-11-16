@@ -240,6 +240,7 @@ local function TextBox(page, x, y, width, title, tooltip, maxLetters, onTyping, 
     refreshers[#refreshers + 1] = function()
         if not box:HasFocus() then
             box:SetText(get() or "")
+            box:SetCursorPosition(0)   -- show the start of a long text, not its end
         end
     end
     return box
@@ -741,7 +742,7 @@ builders.announce = function(page)
     local function Preview(y, kind)
         Label(page, 0, y, "Preview", 10, "dim")
         local text = Label(page, 0, y - 15, "", 11)
-        text:SetSize(PAGE_WIDTH, 28)
+        text:SetSize(PAGE_WIDTH, 32)
         text:SetJustifyV("TOP")
         text:SetWordWrap(true)
         text:SetSpacing(2)
@@ -789,7 +790,12 @@ builders.announce = function(page)
     refreshers[#refreshers + 1] = function()
         delivery:SetText(Announce:DeliveryNote())
     end
-    Note(page, -404, "{portal} is the destination, {player} is you, {spell} the spell's full name. Colour codes and line breaks are left out, and a message is cut at 255 characters.")
+    -- Under the note above, wherever that ends: how many lines it runs to
+    -- depends on the channel chosen, and a fixed place put the two on top of
+    -- each other.
+    local keys = Note(page, -404, "{portal} is the destination, {player} is you, {spell} the spell's full name. A message is cut at 255 characters.")
+    keys:ClearAllPoints()
+    keys:SetPoint("TOPLEFT", delivery, "BOTTOMLEFT", 0, -8)
 end
 
 builders.appearance = function(page)
@@ -967,7 +973,7 @@ end
 -------------------------------------------------------------------------------
 local welcome
 local welcomeChecks = {}
-local WELCOME_HEIGHT = 428
+local WELCOME_HEIGHT = 498
 
 local function readinessDB() return MB.db.readiness end
 local function prepDB() return MB.db.readiness.items end
@@ -1068,7 +1074,7 @@ local function CreateWelcome()
     local choices = CreateFrame("Frame", nil, welcome)
     choices:SetPoint("TOPLEFT", closing, "BOTTOMLEFT", 0, -16)
     choices:SetPoint("RIGHT", welcome, "RIGHT", -16, 0)
-    choices:SetHeight(140)
+    choices:SetHeight(210)
 
     checks.prep = WelcomeCheck(choices, 0, 0, "Preparation check",
         "Answers whether you are stocked before a dungeon or raid.",
@@ -1107,6 +1113,36 @@ local function CreateWelcome()
     Amount("food", 1, "foodTarget", "Food")
     welcome.amounts = amounts
 
+    -- Portal announcements: whether, where, and whether /say is made at the
+    -- click. The wording itself is written on the Announcements page.
+    local function announceDB() return MB.db.announce end
+    local announcing = Theme:Text(choices, 10)
+    announcing:SetPoint("TOPLEFT", 0, -146)
+    announcing:SetJustifyH("LEFT")
+    announcing:SetTextColor(Theme:Color("dim"))
+    announcing:SetText("Announcing your portals")
+
+    checks.announce = WelcomeCheck(choices, 12, -164, "Announce my portals",
+        "Says in chat that your portal is open. What it says is yours to write, under Settings, Announcements.",
+        Field("announce", announceDB, "enabled"))
+
+    local channels = MB.Announce.CHANNELS
+    local getChannel, setChannel = Field("announce", announceDB, "channel")
+    local channel = Cycle(choices, 192, -164, 130, "Announce in",
+        "Where it is said. Party and raid chat only reach your group.", channels, getChannel, setChannel)
+    welcomeChecks[#welcomeChecks + 1] = function()
+        local text = channels[1][2]
+        for i = 1, #channels do
+            if channels[i][1] == getChannel() then text = channels[i][2] end
+        end
+        channel.label:SetText(text)
+    end
+    welcome.channel = channel
+
+    checks.atStart = WelcomeCheck(choices, 12, -188, "In /say and /yell, announce as I start casting",
+        "Out in the world the game only lets an addon speak in /say or /yell at your own click. Ticked, it is said as you click the destination in MageButler's menu. Unticked, a button appears when the portal opens, for you to click.",
+        Field("announce", announceDB, "atStart"))
+
     welcome.checks = checks
 
     -- Sized from its own text, so a larger font or a longer line cannot push
@@ -1116,7 +1152,7 @@ local function CreateWelcome()
         local text = (intro:GetStringHeight() or 0)
             + (clicks:GetStringHeight() or 0)
             + (closing:GetStringHeight() or 0)
-        welcome:SetHeight(math.max(WELCOME_HEIGHT, 54 + text + 42 + 140 + 44))
+        welcome:SetHeight(math.max(WELCOME_HEIGHT, 54 + text + 42 + 210 + 44))
     end
 
     local open = Theme:CreateButton(welcome, "Open settings", 120, 24)

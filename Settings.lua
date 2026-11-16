@@ -1078,7 +1078,7 @@ local function CreateWelcome()
     counts:SetPoint("TOPLEFT", 0, -28)
     counts:SetJustifyH("LEFT")
     counts:SetTextColor(Theme:Color("dim"))
-    counts:SetText("What counts as prepared")
+    counts:SetText("What counts as prepared, and how much is enough")
 
     for i = 1, #WELCOME_PREP do
         local key, label, what = WELCOME_PREP[i][1], WELCOME_PREP[i][2], WELCOME_PREP[i][3]
@@ -1088,6 +1088,24 @@ local function CreateWelcome()
             "Count " .. what .. " in the preparation check. Anything you are not high enough to use stays out of it either way.",
             Field("readiness", prepDB, key))
     end
+
+    -- How much water and food is enough, beside their ticks: below this the
+    -- orb calls for attention. The same numbers as on the Conjuring page.
+    local function conjuringDB() return MB.db.conjuring end
+    local amounts = {}
+    local function Amount(key, row, field, name)
+        local get, set = Field("conjuring", conjuringDB, field)
+        local box = NumberBox(choices, 12 + 88, -45 - row * 24, 40, name .. " to carry",
+            "How many " .. name:lower() .. " you want on you (20 is one full stack). Below this the orb turns yellow and starts to pulse; with none left it turns red. Untick " .. name .. " to leave it out altogether.",
+            0, 400, get, set)
+        welcomeChecks[#welcomeChecks + 1] = function()
+            box:SetText(tostring(get()))
+        end
+        amounts[key] = box
+    end
+    Amount("water", 0, "waterTarget", "Water")
+    Amount("food", 1, "foodTarget", "Food")
+    welcome.amounts = amounts
 
     welcome.checks = checks
 

@@ -110,7 +110,10 @@ end
 --- The chat type the chosen channel comes to at this moment, or nil when it
 --- would reach nobody: party chat alone, raid chat outside a raid.
 function Announce:ResolveChannel()
-    local channel = MB.db.announce.channel
+    -- Dungeons and raids have a channel of their own, the open world another.
+    local inInstance = IsInInstance()
+    local db = MB.db.announce
+    local channel = (not MB.IsSecret(inInstance) and inInstance) and db.channelInstance or db.channelWorld
     if channel == "GROUP" then
         if IsInRaid() then return "RAID" end
         if IsInGroup() then return "PARTY" end

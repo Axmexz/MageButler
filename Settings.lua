@@ -758,39 +758,43 @@ builders.announce = function(page)
     Checkbox(page, 0, -28, "Announce my portals",
         "Says in chat that your portal is open. A portal that is interrupted or cancelled is never announced, and one cast is announced once.",
         Field("announce", announce, "enabled"))
-    Label(page, COLUMN, -32, "Announce in", 12, nil, 86)
-    Cycle(page, COLUMN + 92, -28, 118, "Announce in",
-        "Where the announcement is said. Party and raid chat only reach your group, and nothing is said when the channel would reach nobody.",
-        Announce.CHANNELS, Field("announce", announce, "channel"))
+    --- The channel for one of the two places, with a word on how it is said there.
+    local function Channel(y, key, where, how)
+        Label(page, 0, y - 4, "Announce in", 12, nil, 86)
+        Cycle(page, 92, y, 118, "Announce in",
+            "Where your portal is announced " .. where .. ". Party and raid chat only reach your group, and nothing is said when the channel would reach nobody.",
+            Announce.CHANNELS, Field("announce", announce, key))
+        Label(page, 222, y - 5, how, 10, "dim")
+    end
 
     -- Where the game lets an addon speak unprompted: said as the portal opens.
     Header(page, -58, "In Dungeons and Raids")
-    Label(page, 0, -84, "Said by itself as the portal opens. So are party and raid chat, anywhere.", 10, "dim")
-    local showPortal = Preview(-128, "portal")
-    TextBox(page, 0, -100, PAGE_WIDTH, "Message when the portal opens",
+    Channel(-82, "channelInstance", "inside a dungeon or raid", "by itself, as the portal opens")
+    local showPortal = Preview(-134, "portal")
+    TextBox(page, 0, -108, PAGE_WIDTH, "Message when the portal opens",
         "What is said once your portal is open. {portal} becomes the destination, {player} your name and {spell} the spell's full name. Empty the box to get the standard text back.",
         200, showPortal, Message("text"))
 
     -- Where /say and /yell need the player's own click.
-    Header(page, -184, "Out in the World")
-    Label(page, 0, -210, "Here /say and /yell need your own click: at the cast, or on a button after.", 10, "dim")
-    Checkbox(page, 0, -226, "Announce as I start casting",
+    Header(page, -188, "Out in the World")
+    Channel(-212, "channelWorld", "out in the world", "/say and /yell need your own click here")
+    Checkbox(page, 0, -238, "Announce as I start casting",
         "Ticked, it is said as you click the destination in MageButler's menu, before the cast has finished, in the words below. Nothing is said if the spell is on cooldown or you are moving. Unticked, a button appears when the portal opens and your click on it sends the message above. A portal cast any other way always gets the button.",
         Field("announce", announce, "atStart"))
-    TextBox(page, 0, -252, PAGE_WIDTH, "Message as the cast starts",
+    TextBox(page, 0, -262, PAGE_WIDTH, "Message as the cast starts",
         "What is said at that click, for a portal. The same placeholders work here.",
         200, nil, Message("startText"))
 
-    Header(page, -284, "Your Own Teleports")
-    Checkbox(page, 0, -310, "Announce my own teleports too",
+    Header(page, -292, "Your Own Teleports")
+    Checkbox(page, 0, -318, "Announce my own teleports too",
         "Also says so when you teleport yourself, in the words below, wherever you are. Off, only portals are announced.",
         Field("announce", announce, "teleports"))
-    local showTeleport = Preview(-364, "teleport")
-    TextBox(page, 0, -336, PAGE_WIDTH, "Teleport message",
+    local showTeleport = Preview(-370, "teleport")
+    TextBox(page, 0, -344, PAGE_WIDTH, "Teleport message",
         "What is said when you teleport yourself, if that is switched on. The same placeholders work here.",
         200, showTeleport, Message("teleportText"))
 
-    Note(page, -418, "{portal} is the destination, {player} is you, {spell} the spell's full name. A message is cut at 255 characters.")
+    Note(page, -424, "{portal} is the destination, {player} is you, {spell} the spell's full name. A message is cut at 255 characters.")
 end
 
 builders.appearance = function(page)
@@ -1136,20 +1140,9 @@ local function CreateWelcome()
         "Says in chat that your portal is open. What it says is yours to write, under Settings, Announcements.",
         Field("announce", announceDB, "enabled"))
 
+    -- The two places it can happen, under their own headings, each with the
+    -- channel it is said in there.
     local channels = MB.Announce.CHANNELS
-    local getChannel, setChannel = Field("announce", announceDB, "channel")
-    local channel = Cycle(choices, 192, -164, 130, "Announce in",
-        "Where it is said. Party and raid chat only reach your group.", channels, getChannel, setChannel)
-    welcomeChecks[#welcomeChecks + 1] = function()
-        local text = channels[1][2]
-        for i = 1, #channels do
-            if channels[i][1] == getChannel() then text = channels[i][2] end
-        end
-        channel.label:SetText(text)
-    end
-    welcome.channel = channel
-
-    -- The two places it can happen, under their own headings.
     local function Heading(y, text)
         local label = Theme:Text(choices, 10)
         label:SetPoint("TOPLEFT", 0, y)
@@ -1158,13 +1151,30 @@ local function CreateWelcome()
         label:SetText(text)
         return label
     end
+    local function ChannelButton(y, key, where)
+        local get, set = Field("announce", announceDB, key)
+        local button = Cycle(choices, 234, y, 130, "Announce in",
+            "Where your portal is announced " .. where .. ". Party and raid chat only reach your group.",
+            channels, get, set)
+        welcomeChecks[#welcomeChecks + 1] = function()
+            local text = channels[1][2]
+            for i = 1, #channels do
+                if channels[i][1] == get() then text = channels[i][2] end
+            end
+            button.label:SetText(text)
+        end
+        return button
+    end
+
     Heading(-192, "In dungeons and raids")
     local inside = Theme:Text(choices, 11)
     inside:SetPoint("TOPLEFT", 12, -208)
     inside:SetJustifyH("LEFT")
-    inside:SetText("Said by itself as the portal opens.")
+    inside:SetText("Said by itself as the portal opens, in")
+    welcome.channelInstance = ChannelButton(-204, "channelInstance", "inside a dungeon or raid")
 
     Heading(-230, "Out in the world, where /say and /yell need your click")
+    welcome.channelWorld = ChannelButton(-244, "channelWorld", "out in the world")
     checks.atStart = WelcomeCheck(choices, 12, -246, "Announce as I start casting",
         "Out in the world the game only lets an addon speak in /say or /yell at your own click. Ticked, it is said as you click the destination in MageButler's menu. Unticked, a button appears when the portal opens, for you to click.",
         Field("announce", announceDB, "atStart"))

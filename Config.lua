@@ -127,7 +127,10 @@ Config.defaults = {
     },
     announce = {
         enabled = false,
-        channel = "SAY",         -- "SAY", "YELL", "PARTY", "RAID" or "GROUP" (party or raid)
+        -- Where it is said, in a dungeon or raid and out in the world:
+        -- "SAY", "YELL", "PARTY", "RAID" or "GROUP" (party or raid).
+        channelInstance = "SAY",
+        channelWorld = "SAY",
         text = "Your personal MageButler has opened a portal to {portal}. Tips are appreciated, complaints go straight to the gnome!",
         teleports = false,       -- say so for the player's own teleports as well
         teleportText = "{player} is teleporting to {portal}.",
@@ -244,6 +247,14 @@ local function DropRetired(profile)
     end
     if type(profile.buffwatch) == "table" then
         profile.buffwatch.acceptLowerRanks = nil
+    end
+    -- One announcement channel became two, for dungeons and for the open
+    -- world. A channel already chosen is kept for both.
+    local announce = profile.announce
+    if type(announce) == "table" and type(announce.channel) == "string" then
+        if type(announce.channelInstance) ~= "string" then announce.channelInstance = announce.channel end
+        if type(announce.channelWorld) ~= "string" then announce.channelWorld = announce.channel end
+        announce.channel = nil
     end
 end
 

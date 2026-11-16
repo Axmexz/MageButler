@@ -142,27 +142,6 @@ local function Unprompted(chatType)
     return true
 end
 
---- One sentence for the settings on how the chosen channel behaves.
-function Announce:DeliveryNote()
-    local channel = MB.db.announce.channel
-    if channel == "SAY" or channel == "YELL" then
-        local where = WHERE[channel]
-        if MB.db.announce.atStart then
-            return "In a dungeon or raid this is said as the portal opens. Out in the world it is said in "
-                .. where .. " as you click the destination in MageButler's menu, before the cast has finished."
-        end
-        return "In a dungeon or raid this is said by itself as the portal opens. Out in the world the game only lets an addon speak in "
-            .. where .. " at your own click, so a button appears instead: click it and the message is sent."
-    end
-    if channel == "RAID" then
-        return "Sent in raid chat as the portal opens. Nothing is said while you are not in a raid."
-    end
-    if channel == "PARTY" then
-        return "Sent in party chat as the portal opens. Nothing is said while you are not in a group."
-    end
-    return "Sent in raid chat in a raid and in party chat in a party, as the portal opens. Nothing is said while you are on your own."
-end
-
 -------------------------------------------------------------------------------
 -- Saying it
 -------------------------------------------------------------------------------

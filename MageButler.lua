@@ -383,9 +383,12 @@ end
 -- which looks exactly like having run out of everything.
 --
 --   * A loading screen closes the gate: nothing is read until it is over.
---   * The gate opens when an item can actually be read out of a bag slot and
---     the count of that same item agrees it is there. The backpack reporting
---     its slots is not enough: it does that while their contents are unknown.
+--   * The gate opens when an item can actually be read out of a bag slot. The
+--     backpack reporting its slots is not enough: it does that while their
+--     contents are unknown.
+--   * The client's counts are believed only while they agree with the slots:
+--     an item seen in a slot must be counted as being there. When the two
+--     disagree, the slots are counted directly instead.
 --   * A read that finds no item anywhere is not believed straight away. The
 --     counts stay as they were while the bags are asked again, and only bags
 --     that go on reading empty are taken to be empty.
@@ -404,9 +407,10 @@ local WITNESSES = 3        -- items asked about before the counts are doubted
 MB.inventoryReady = false   -- the bags can be read and believed right now
 MB.inventoryKnown = false   -- they have been read at least once this session
 
-local tracked, isTracked = {}, {}   -- the item IDs that are counted
+local tracked, trackedIndex = {}, {}   -- the item IDs that are counted, and each one's place in the list
 local snapshot = {}                 -- [itemID] = count at the last read believed
 local fresh = {}                    -- one read, before any of it is kept
+local readingBy                     -- "counts" or "slots": how the last read was made
 local loading = true                -- a loading screen is up, as it is when this file loads
 local loadingSince = GetTime()
 local closedAt                      -- when the gate last closed, for the trail
@@ -417,9 +421,9 @@ local inventoryWaiters = {}
 
 --- Has an item counted from now on. Modules call this as they load.
 function MB:TrackItem(itemID)
-    if isTracked[itemID] then return end
-    isTracked[itemID] = true
+    if trackedIndex[itemID] then return end
     tracked[#tracked + 1] = itemID
+    trackedIndex[itemID] = #tracked
 end
 
 --- How many of a tracked item were in the bags at the last read that could be
@@ -437,12 +441,16 @@ function MB:AfterInventory(fn)
     inventoryWaiters[#inventoryWaiters + 1] = fn
 end
 
---- Whether a read made at this moment could be believed. "ok" needs two
---- things to agree: a bag slot gives up an item, and the count of that very
---- item says it is there. "empty" is no slot giving up anything; "refused" is
---- the bags showing items that the counts deny or will not give. A few items
---- are asked about before the counts are doubted, so one odd item at the top
---- of the backpack cannot hold everything up.
+--- How the bags can be read at this moment, if at all.
+---   "counts"  a bag slot gives up an item, and the count of that very item
+---             agrees it is there: the client's counts can be believed.
+---   "slots"   the slots show items that the counts deny or will not give.
+---             The slots are the plainer evidence, so the counting is done
+---             from them instead.
+---   nil       no slot gives up anything: the client cannot say what is in
+---             the bags, or there is nothing in them.
+--- A few items are asked about before the counts are doubted, so one item the
+--- client miscounts cannot send everything the slow way round.
 local function Probe()
     local denied = 0
     for bag = 0, MB.LAST_BAG do
@@ -451,27 +459,56 @@ local function Probe()
             if itemID then
                 believedEmpty = false
                 local count = API.ItemCount(itemID)
-                if count and count >= 1 then return "ok" end
+                if count and count >= 1 then return "counts" end
                 denied = denied + 1
-                if denied >= WITNESSES then return "refused" end
+                if denied >= WITNESSES then return "slots" end
             end
         end
     end
-    if denied > 0 then return "refused" end
-    return believedEmpty and "ok" or "empty"
+    if denied > 0 then return "slots" end
+    return believedEmpty and "counts" or nil
 end
 
---- Reads every tracked count and keeps the lot or none of it. Returns "ok"
---- and whether any count changed, or why nothing was kept. `expected` is false
---- for a read that nothing in the bags prompted: if one of those finds
---- different numbers, an update went missing, and the trail says so.
+--- Reads every tracked count and keeps the lot or none of it. Returns true
+--- and whether any count changed, or false when the bags gave nothing to go
+--- on and the counts were left as they were. `expected` is false for a read
+--- that nothing in the bags prompted: if one of those finds different
+--- numbers, an update went missing, and the trail says so.
 local function ReadSnapshot(source, expected)
-    local answer = Probe()
-    if answer ~= "ok" then return answer end
-    for i = 1, #tracked do
-        local count = API.ItemCount(tracked[i])
-        if not count then return "refused" end
-        fresh[i] = count
+    local how = Probe()
+    if not how then return false end
+
+    if how == "counts" then
+        for i = 1, #tracked do
+            local count = API.ItemCount(tracked[i])
+            if not count then
+                how = "slots"   -- one will not be given: count them all here instead
+                break
+            end
+            fresh[i] = count
+        end
+    end
+    if how == "slots" then
+        for i = 1, #tracked do
+            fresh[i] = 0
+        end
+        for bag = 0, MB.LAST_BAG do
+            for slot = 1, API.BagSlots(bag) do
+                local itemID, count = API.BagItem(bag, slot)
+                local index = itemID and trackedIndex[itemID]
+                if index then
+                    fresh[index] = fresh[index] + count
+                end
+            end
+        end
+    end
+    if how ~= readingBy then
+        if how == "slots" then
+            MB:Log("the client's counts disagree with the bags: counting slot by slot (" .. source .. ")")
+        elseif readingBy == "slots" then
+            MB:Log("the client's counts agree with the bags again")
+        end
+        readingBy = how
     end
 
     local changed, gone, missed = false, nil, nil
@@ -498,7 +535,7 @@ local function ReadSnapshot(source, expected)
     if missed then
         MB:Log("counts were out of date: " .. missed .. " (" .. source .. ")")
     end
-    return "ok", changed
+    return true, changed
 end
 
 local function Announce(redraw)
@@ -554,17 +591,14 @@ local function Ask(tries, patience, quiet)
     C_Timer.After((quiet and tries == 0) and SETTLE_DELAY or SETTLE_STEP, function()
         if token ~= askToken then return end
         asking = false
-        local answer = Probe()
-        if answer == "ok" then
+        if Probe() then
             Open("the bags answered")
         elseif tries < patience then
             Ask(tries + 1, patience, quiet)
-        elseif answer == "empty" then
+        else
             -- Bags that go on reading empty are empty.
             believedEmpty = true
             Open("the bags stayed empty")
-        else
-            MB:Log("the counts still disagree with the bags: waiting for a bag update")
         end
     end)
 end
@@ -585,7 +619,7 @@ function MB:RefreshInventory(force, source)
             loading = false
             self:Log("a loading screen never reported ending: taken as over")
         end
-        if Probe() == "ok" then
+        if Probe() then
             Open(source)
             return self.inventoryReady
         end
@@ -595,11 +629,11 @@ function MB:RefreshInventory(force, source)
         return false
     end
 
-    local result, changed = ReadSnapshot(source, force or source == "bag update")
-    if result ~= "ok" then
+    local read, changed = ReadSnapshot(source, force or source == "bag update")
+    if not read then
         -- Nothing explains bags that have stopped answering, so they are
         -- simply asked again, and the counts stay as they were meanwhile.
-        Close(result == "empty" and "the bags read empty" or "the counts disagree with the bags")
+        Close("the bags read empty")
         Ask(0, DOUBT_TRIES, false)
         return false
     end
@@ -650,6 +684,7 @@ function MB:PrintDiagnostics()
     if loading then state = state .. ", loading screen up" end
     if asking then state = state .. ", asking the bags" end
     if believedEmpty then state = state .. ", bags taken to be empty" end
+    if readingBy == "slots" then state = state .. ", counted slot by slot" end
     local witness = API.AnyBagItem()
     self:Print("inventory: " .. state .. ". Backpack slots: " .. API.BagSlots(0) .. ". First item found: "
         .. (witness and (witness .. ", counted as " .. tostring(API.ItemCount(witness))) or "none") .. ".")

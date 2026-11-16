@@ -815,7 +815,7 @@ builders.appearance = function(page)
         function(value) return math.floor(value * 100 + 0.5) .. "%" end,
         Field("appearance", appearance, "panelAlpha"))
 
-    Checkbox(page, 0, -116, "Orb glow", "A soft halo behind the orb.",
+    Checkbox(page, 0, -116, "Orb glow", "A soft halo behind the orb while something needs your attention: players to buff, or supplies running short. Dark when all is well.",
         Field("appearance", appearance, "glow"))
     Checkbox(page, COLUMN, -116, "Status animations",
         "The status pips on the orb pulse while something needs attention: slowly for a warning, faster when something is missing. Steady when all is well.",

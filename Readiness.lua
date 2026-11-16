@@ -295,6 +295,7 @@ local function Update()
         panel:Hide()
     end
     UpdatePanel()
+    MB.RadialMenu:RefreshGlow()
 end
 
 -------------------------------------------------------------------------------

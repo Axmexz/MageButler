@@ -716,8 +716,23 @@ function Radial:Apply()
         RefreshAttributes()
         Radial:ApplyBindings()
     end)
-    orb.halo:SetShown(MB.db.appearance.glow)
+    self:RefreshGlow()
     self:RefreshVisuals()
+end
+
+--- The halo behind the orb is a call for attention, not decoration: it is lit
+--- only while Buff Watch has players to buff or the preparation check is
+--- short of something, and dark the rest of the time.
+function Radial:RefreshGlow()
+    if not orb then return end
+    local attention = false
+    if MB.db.appearance.glow and MB.db.general.enabled then
+        local watch, ready = MB.BuffWatch, MB.Readiness
+        local buffs = watch and not watch:GetState().paused and watch:GetOverall()
+        local supplies = ready and ready:GetOverall()
+        attention = buffs == "low" or buffs == "none" or supplies == "low" or supplies == "none"
+    end
+    orb.halo:SetShown(attention)
 end
 
 --- Slash-command toggle. In combat only the orb (a secure click) can do this.

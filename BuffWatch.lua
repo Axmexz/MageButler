@@ -612,6 +612,7 @@ function BuffWatch:RefreshVisuals()
     end
 
     RefreshList()
+    MB.RadialMenu:RefreshGlow()
 end
 
 --- Buffed and watched player counts, for the preparation check.

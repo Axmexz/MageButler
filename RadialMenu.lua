@@ -742,7 +742,10 @@ local REST = 0.5
 function Radial:RefreshGlow()
     if not orb then return end
     local watch, ready = MB.BuffWatch, MB.Readiness
-    local buffs = watch and not watch:GetState().paused and watch:GetOverall()
+    -- In combat Buff Watch stops reading buffs but keeps its last picture,
+    -- and that picture goes on being shown: a player who went into the fight
+    -- without Intellect is still without it. It is read afresh as combat ends.
+    local buffs = watch and watch:GetOverall()
     local supplies = ready and ready:GetOverall()
     local buffsNeed = buffs == "low" or buffs == "none"
     local attention = MB.db.general.enabled and (buffsNeed or supplies == "low" or supplies == "none")

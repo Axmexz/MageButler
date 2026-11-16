@@ -372,7 +372,7 @@ function Theme:SetBreath(region, mode)
     end
     if region.mbBreathMode ~= mode then
         group:Stop()
-        local duration = (mode == "fast") and 0.7 or 1.5
+        local duration = 1.25   -- out and back in 2.5s, in step with the ripple
         group.alpha:SetDuration(duration)
         group.scale:SetDuration(duration)
         region.mbBreathMode = mode
@@ -412,7 +412,7 @@ function Theme:SetWave(region, mode)
     region:Show()
     if region.mbWaveMode ~= mode then
         group:Stop()
-        local duration = (mode == "fast") and 0.9 or 1.6
+        local duration = 2.5    -- one unhurried pace, whatever the colour
         group.scale:SetDuration(duration)
         group.alpha:SetDuration(duration)
         region.mbWaveMode = mode

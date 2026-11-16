@@ -508,10 +508,20 @@ function Theme:SetWave(region, mode)
         end
         group.scale:SetSmoothing("OUT")
         group.scale:SetDuration(BEAT)
+        -- It fades in over the first fifth of the beat and out over the rest.
+        -- Starting at full strength, each new ripple appeared all at once,
+        -- drawn exactly on top of the orb's own ring, and that read as a
+        -- flash every time the loop came round.
+        local rise = BEAT * 0.2
+        group.fadeIn = group:CreateAnimation("Alpha")
+        group.fadeIn:SetFromAlpha(0)
+        group.fadeIn:SetToAlpha(0.7)
+        group.fadeIn:SetDuration(rise)
         group.alpha = group:CreateAnimation("Alpha")
-        group.alpha:SetFromAlpha(0.8)
+        group.alpha:SetFromAlpha(0.7)
         group.alpha:SetToAlpha(0)
-        group.alpha:SetDuration(BEAT)
+        group.alpha:SetStartDelay(rise)
+        group.alpha:SetDuration(BEAT - rise)
         region.mbWave = group
     end
     -- Invisible in its own right, so that it is only ever seen through the

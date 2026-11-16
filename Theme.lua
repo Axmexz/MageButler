@@ -352,20 +352,20 @@ function Theme:SetBreath(region, mode)
             group:Stop()
         end
         region.mbBreathMode = nil
-        region:SetAlpha(0.55)
+        region:SetAlpha(0.7)
         return
     end
     if not group then
         group = region:CreateAnimationGroup()
         group:SetLooping("BOUNCE")
         group.alpha = group:CreateAnimation("Alpha")
-        group.alpha:SetFromAlpha(0.3)
-        group.alpha:SetToAlpha(0.8)
+        group.alpha:SetFromAlpha(0.35)
+        group.alpha:SetToAlpha(1)
         group.alpha:SetSmoothing("IN_OUT")
         group.scale = group:CreateAnimation("Scale")
         if group.scale.SetScaleFrom then
-            group.scale:SetScaleFrom(0.92, 0.92)
-            group.scale:SetScaleTo(1.12, 1.12)
+            group.scale:SetScaleFrom(0.85, 0.85)
+            group.scale:SetScaleTo(1.3, 1.3)
         end
         group.scale:SetSmoothing("IN_OUT")
         region.mbBreath = group
@@ -376,6 +376,46 @@ function Theme:SetBreath(region, mode)
         group.alpha:SetDuration(duration)
         group.scale:SetDuration(duration)
         region.mbBreathMode = mode
+        group:Play()
+    end
+end
+
+--- A ring that spreads outwards and fades, again and again, like a ripple.
+--- "fast" or "slow" sets how often; nil stops it and hides the ring. With
+--- status animations switched off there is no ripple at all.
+function Theme:SetWave(region, mode)
+    if mode and not (MB.db and MB.db.appearance.statusAnimations) then
+        mode = nil
+    end
+    local group = region.mbWave
+    if not mode then
+        if group then group:Stop() end
+        region.mbWaveMode = nil
+        region:Hide()
+        return
+    end
+    if not group then
+        group = region:CreateAnimationGroup()
+        group:SetLooping("REPEAT")
+        group.scale = group:CreateAnimation("Scale")
+        if group.scale.SetScaleFrom then
+            group.scale:SetScaleFrom(1, 1)
+            group.scale:SetScaleTo(2.2, 2.2)
+        end
+        group.scale:SetSmoothing("OUT")
+        group.alpha = group:CreateAnimation("Alpha")
+        group.alpha:SetFromAlpha(0.9)
+        group.alpha:SetToAlpha(0)
+        group.alpha:SetSmoothing("OUT")
+        region.mbWave = group
+    end
+    region:Show()
+    if region.mbWaveMode ~= mode then
+        group:Stop()
+        local duration = (mode == "fast") and 0.9 or 1.6
+        group.scale:SetDuration(duration)
+        group.alpha:SetDuration(duration)
+        region.mbWaveMode = mode
         group:Play()
     end
 end

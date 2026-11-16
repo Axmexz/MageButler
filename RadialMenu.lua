@@ -100,9 +100,17 @@ local function CreateOrb()
     orb.halo = orb:CreateTexture(nil, "BACKGROUND", nil, -1)
     orb.halo:SetTexture(MB.MEDIA .. "Glow.tga")
     orb.halo:SetBlendMode("ADD")
-    orb.halo:SetPoint("TOPLEFT", -13, 13)
-    orb.halo:SetPoint("BOTTOMRIGHT", 13, -13)
+    orb.halo:SetPoint("TOPLEFT", -22, 22)
+    orb.halo:SetPoint("BOTTOMRIGHT", 22, -22)
     orb.halo:Hide()   -- lit, coloured and set breathing by RefreshGlow, and only then
+
+    -- A ring that travels outwards from the orb and fades as it goes, over
+    -- and over, while something needs attention.
+    orb.wave = orb:CreateTexture(nil, "BACKGROUND", nil, -2)
+    orb.wave:SetTexture(MB.MEDIA .. "Ring.tga")
+    orb.wave:SetBlendMode("ADD")
+    orb.wave:SetAllPoints()
+    orb.wave:Hide()
 
     orb.core = orb:CreateTexture(nil, "BACKGROUND", nil, 1)
     orb.core:SetTexture(MB.MEDIA .. "Orb.tga")
@@ -747,9 +755,12 @@ function Radial:RefreshGlow()
         orb.halo:SetVertexColor(Theme:StateColor(worst))
         orb.halo:Show()
         Theme:SetBreath(orb.halo, worst == "none" and "fast" or "slow")
+        orb.wave:SetVertexColor(Theme:StateColor(worst))
+        Theme:SetWave(orb.wave, worst == "none" and "fast" or "slow")
     else
         Theme:SetBreath(orb.halo, nil)
         orb.halo:Hide()
+        Theme:SetWave(orb.wave, nil)
     end
 
     if buffsNeed and MB.db.buffwatch.orbColors then

@@ -18,6 +18,7 @@ local SECTIONS = {
     { key = "reagents", label = "Reagents", icon = "Interface\\Icons\\INV_Misc_Rune_06" },
     { key = "conjuring", label = "Conjuring", icon = "Interface\\Icons\\INV_Drink_07" },
     { key = "trading", label = "Trading", icon = "Interface\\Icons\\INV_Misc_Bag_10" },
+    { key = "announce", label = "Announcements", icon = "Interface\\Icons\\Spell_Arcane_PortalStormWind" },
     { key = "appearance", label = "Appearance", icon = "Interface\\Icons\\INV_Misc_Gem_Sapphire_02" },
 }
 
@@ -198,6 +199,47 @@ local function NumberBox(page, x, y, width, title, tooltip, low, high, get, set)
     refreshers[#refreshers + 1] = function()
         if not box:HasFocus() then
             box:SetText(tostring(get()))
+        end
+    end
+    return box
+end
+
+--- A one-line text field. The text is saved when the field is left; while it
+--- is being typed, `onTyping` hears what is in it so far.
+local function TextBox(page, x, y, width, title, tooltip, maxLetters, onTyping, get, set)
+    local box = CreateFrame("EditBox", nil, page, "BackdropTemplate")
+    box:SetSize(width, 22)
+    box:SetPoint("TOPLEFT", x, y)
+    Theme:SkinBox(box, "panel")
+    box:SetFontObject(GameFontHighlightSmall)
+    box:SetAutoFocus(false)
+    box:SetMaxLetters(maxLetters)
+    box:SetTextInsets(6, 6, 0, 0)
+
+    box:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+    end)
+    box:SetScript("OnEscapePressed", function(self)
+        self:SetText(get() or "")
+        if onTyping then onTyping(get() or "") end
+        self:ClearFocus()
+    end)
+    box:SetScript("OnEditFocusLost", function(self)
+        local value = self:GetText() or ""
+        if value ~= get() then
+            set(value)
+        end
+    end)
+    if onTyping then
+        box:SetScript("OnTextChanged", function(self, userInput)
+            if userInput then onTyping(self:GetText() or "") end
+        end)
+    end
+    Theme:AttachTooltip(box, title, tooltip)
+
+    refreshers[#refreshers + 1] = function()
+        if not box:HasFocus() then
+            box:SetText(get() or "")
         end
     end
     return box
@@ -679,6 +721,66 @@ builders.trading = function(page)
     end
 
     Note(page, -304, "Numbers are items, not stacks. Only the strongest rank you carry is handed over, so older leftovers stay in your bags. Only conjured water and food are ever offered, only into empty trade slots, and only once per trade. MageButler never accepts a trade for you. A trade window has six slots, so at most six stacks fit.")
+end
+
+builders.announce = function(page)
+    local Announce = MB.Announce
+    local function announce() return MB.db.announce end
+
+    --- get/set for one of the two messages.
+    local function Message(key)
+        return function()
+            return MB.db.announce[key]
+        end, function(value)
+            Announce:SetMessage(key, value)
+        end
+    end
+
+    --- The line showing what would actually be said. It follows the typing.
+    local function Preview(y, kind)
+        Label(page, 0, y, "Preview", 10, "dim")
+        local text = Label(page, 0, y - 15, "", 11)
+        text:SetSize(PAGE_WIDTH, 40)
+        text:SetJustifyV("TOP")
+        text:SetWordWrap(true)
+        text:SetSpacing(2)
+        refreshers[#refreshers + 1] = function()
+            text:SetText(Announce:Preview(kind))
+        end
+        return function(typed)
+            text:SetText(Announce:Preview(kind, typed))
+        end
+    end
+
+    Header(page, 0, "Portal Announcements")
+    Checkbox(page, 0, -28, "Announce my portals",
+        "Says in chat that your portal is open, once the cast has gone through. A portal that is interrupted or cancelled is never announced, and one cast is announced once.",
+        Field("announce", announce, "enabled"))
+    Label(page, COLUMN, -32, "Announce in", 12, nil, 86)
+    Cycle(page, COLUMN + 92, -28, 118, "Announce in",
+        "Where the announcement is said. Party and raid chat only reach your group, and nothing is said when the channel would reach nobody.",
+        Announce.CHANNELS, Field("announce", announce, "channel"))
+
+    Label(page, 0, -62, "Message", 10, "dim")
+    local showPortal = Preview(-108, "portal")
+    TextBox(page, 0, -78, PAGE_WIDTH, "Portal message",
+        "What is said when one of your portals opens. {portal} becomes the destination, {player} your name and {spell} the spell's full name. Empty the box to get the standard text back.",
+        200, showPortal, Message("text"))
+
+    Checkbox(page, 0, -178, "Announce my own teleports too",
+        "Also says so when you teleport yourself. Off, only portals are announced.",
+        Field("announce", announce, "teleports"))
+    Label(page, 0, -208, "Teleport message", 10, "dim")
+    local showTeleport = Preview(-254, "teleport")
+    TextBox(page, 0, -224, PAGE_WIDTH, "Teleport message",
+        "What is said when you teleport yourself, if that is switched on. The same placeholders work here.",
+        200, showTeleport, Message("teleportText"))
+
+    local delivery = Note(page, -326, "")
+    refreshers[#refreshers + 1] = function()
+        delivery:SetText(Announce:DeliveryNote())
+    end
+    Note(page, -384, "{portal} is the destination, {player} is you and {spell} is the spell's full name. Colour codes and line breaks cannot be sent in chat and are left out, and a message is cut at 255 characters.")
 end
 
 builders.appearance = function(page)

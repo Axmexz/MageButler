@@ -19,6 +19,8 @@ machine.
 - **Auto-Trade:** Automatically fill trades with food and water.
 - **Buff Watch:** Keep your party and raid buffed with intelligent Arcane
   Intellect and Arcane Brilliance management.
+- **Portal Announcements:** Tell your group, or the whole street, that the
+  portal is open, in your own words.
 - **Fully Customizable:** Adjust everything to your liking.
 
 Less clicking. Less micromanagement. More pew pew.
@@ -56,6 +58,15 @@ have actually learned.
 
 `/mb` opens the settings. It also takes `menu`, `orb`, `ready`, `buffs`,
 `fill`, `reset` and `debug`; `/mb help` lists them. `/magebutler` works too.
+
+Portal announcements are off until you switch them on under Settings,
+Announcements, where you also write the message: `{portal}` becomes the
+destination and `{player}` your name. Party and raid chat are announced by
+themselves as the portal opens. `/say` and `/yell` are different: outside a
+dungeon or raid the game only lets an addon speak there at your own click, so
+MageButler shows a button when the portal opens and your click on it sends the
+message. A portal that is interrupted is never announced, and one cast is
+announced once.
 
 If a counter ever looks wrong, `/mb debug` prints what MageButler has counted
 beside what the game reports at that moment, with a short history of how it got

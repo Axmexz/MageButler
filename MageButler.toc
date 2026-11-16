@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: |cff5ed7ffMage|r|cffb79cffButler|r
-## Notes: Your personal Mage assistant: a radial orb for portals, teleports and conjuring, reagent restocking, trade filling and a preparation check.
+## Notes: Your personal Mage assistant: a radial orb for portals, teleports and conjuring, reagent restocking, trade filling, portal announcements and a preparation check.
 ## Author: Padre Pidisc
 ## Version: 1.1.0
 ## X-License: All Rights Reserved
@@ -18,4 +18,5 @@ Trade.lua
 RadialMenu.lua
 BuffWatch.lua
 Readiness.lua
+Announce.lua
 Settings.lua

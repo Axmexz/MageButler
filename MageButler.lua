@@ -53,6 +53,35 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     end
 end)
 
+-- Unit events that only matter for the player get a frame of their own, so
+-- the client delivers them for the player alone. Registered the ordinary way,
+-- an event such as UNIT_SPELLCAST_SUCCEEDED arrives for every player and
+-- creature in sight, and for anyone but the player its details can be secret.
+local playerFrame = CreateFrame("Frame")
+local playerHandlers = {}
+
+--- Registers a callback for a unit event, for the player only.
+function MB:RegisterPlayerEvent(event, fn)
+    local list = playerHandlers[event]
+    if not list then
+        if not pcall(playerFrame.RegisterUnitEvent, playerFrame, event, "player") then
+            return false
+        end
+        list = {}
+        playerHandlers[event] = list
+    end
+    list[#list + 1] = fn
+    return true
+end
+
+playerFrame:SetScript("OnEvent", function(_, event, ...)
+    local list = playerHandlers[event]
+    if not list then return end
+    for i = 1, #list do
+        list[i](event, ...)
+    end
+end)
+
 function MB:On(message, fn)
     local list = messageHandlers[message]
     if not list then

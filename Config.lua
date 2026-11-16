@@ -125,6 +125,13 @@ Config.defaults = {
             runeT = true, runeP = true, powder = true,
         },
     },
+    announce = {
+        enabled = false,
+        channel = "SAY",         -- "SAY", "YELL", "PARTY", "RAID" or "GROUP" (party or raid)
+        text = "Your personal MageButler has opened a portal to {portal}. Tips are appreciated, complaints go straight to the gnome!",
+        teleports = false,       -- say so for the player's own teleports as well
+        teleportText = "{player} is teleporting to {portal}.",
+    },
     appearance = {
         accent = "arcane",
         panelAlpha = 0.92,

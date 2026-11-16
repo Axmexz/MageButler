@@ -1106,6 +1106,21 @@ local function CreateWelcome()
     end
     Amount("water", 0, "waterTarget", "Water")
     Amount("food", 1, "foodTarget", "Food")
+
+    -- The reagents, down the right-hand column: how few is too few. The same
+    -- numbers as "Warn at" on the Reagents page.
+    for row, key in ipairs(MB.Reagents.ORDER) do
+        local function item() return MB.db.reagents.items[key] end
+        local get, set = Field("reagents", item, "warn")
+        local name = MB.Reagents:Name(key)
+        local box = NumberBox(choices, 12 + 168 + 138, -45 - (row - 1) * 24, 34, name .. ": warn at",
+            "With this many " .. name .. " or fewer the orb turns yellow and starts to pulse; with none left it turns red. How many to restock up to is set on the Reagents page.",
+            0, 200, get, set)
+        welcomeChecks[#welcomeChecks + 1] = function()
+            box:SetText(tostring(get()))
+        end
+        amounts[key] = box
+    end
     welcome.amounts = amounts
 
     -- Portal announcements: whether, where, and whether /say is made at the

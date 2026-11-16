@@ -64,7 +64,9 @@ local bookIDs = {}      -- [spellID] = true for every active spell in the book
 local bookTop = {}      -- [localised name] = spellID of the highest learned rank
 local teleports, portals = {}, {}
 local best = {}
+local gemSpells = {}    -- [index into Spells.GEMS] = the learned spell, or false
 local signature = ""
+local SIGNATURE_KEYS = { "water", "food", "ritual", "intellect", "brilliance" }
 
 -------------------------------------------------------------------------------
 -- Spellbook scan
@@ -208,6 +210,12 @@ function Spells:Scan()
     for key in pairs(RANKS) do
         best[key] = HighestRank(key)
     end
+    -- Which gems can be conjured is asked on every redraw, so it is worked
+    -- out here, once per scan, like everything else that comes from the book.
+    for i = 1, #self.GEMS do
+        local gem = self.GEMS[i]
+        gemSpells[i] = Resolve(gem.spell) or (API.IsSpellKnown(gem.spell) and gem.spell) or false
+    end
 
     -- Only announce a change when something MageButler shows actually changed.
     local parts = {}
@@ -215,7 +223,7 @@ function Spells:Scan()
     parts[#parts + 1] = "|"
     for i = 1, #portals do parts[#parts + 1] = portals[i].id end
     parts[#parts + 1] = "|"
-    for _, key in ipairs({ "water", "food", "ritual", "intellect", "brilliance" }) do
+    for _, key in ipairs(SIGNATURE_KEYS) do
         parts[#parts + 1] = best[key] or 0
     end
     parts[#parts + 1] = "|"
@@ -241,12 +249,7 @@ function Spells:GetBest(key) return best[key] end
 
 --- The learned Conjure Mana Gem spell for an entry of Spells.GEMS, or nil.
 function Spells:GemSpell(index)
-    local gem = self.GEMS[index]
-    if not gem then return nil end
-    local spellID = Resolve(gem.spell)
-    if spellID then return spellID end
-    if API.IsSpellKnown(gem.spell) then return gem.spell end
-    return nil
+    return gemSpells[index] or nil
 end
 
 function Spells:KnowsGem(index)
@@ -270,10 +273,11 @@ end
 
 -------------------------------------------------------------------------------
 function Spells:OnEnable()
+    local function Scan()
+        Spells:Scan()
+    end
     local function Rescan()
-        MB:Debounce("spells", 0.4, function()
-            Spells:Scan()
-        end)
+        MB:Debounce("spells", 0.4, Scan)
     end
 
     MB:RegisterEvent("SPELLS_CHANGED", Rescan)

@@ -30,6 +30,25 @@ local eventFrame = CreateFrame("Frame")
 local eventHandlers = {}
 local messageHandlers = {}
 
+-- Where several handlers hear the same thing, one of them failing must not
+-- silence the ones after it: an error in one module would otherwise leave
+-- another module's display out of date with nothing to show for it. Each is
+-- called on its own, and an error still reaches the client's error handler.
+-- A lone handler has nobody to hold up, so it is simply called.
+local securecall = _G.securecallfunction
+
+local function Dispatch(list, ...)
+    if #list == 1 or not securecall then
+        for i = 1, #list do
+            list[i](...)
+        end
+        return
+    end
+    for i = 1, #list do
+        securecall(list[i], ...)
+    end
+end
+
 --- Registers a callback for a game event. Returns false when the client does
 --- not know the event, so optional events can be requested safely.
 function MB:RegisterEvent(event, fn)
@@ -47,10 +66,7 @@ end
 
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     local list = eventHandlers[event]
-    if not list then return end
-    for i = 1, #list do
-        list[i](event, ...)
-    end
+    if list then Dispatch(list, event, ...) end
 end)
 
 -- Unit events that only matter for the player get a frame of their own, so
@@ -76,10 +92,7 @@ end
 
 playerFrame:SetScript("OnEvent", function(_, event, ...)
     local list = playerHandlers[event]
-    if not list then return end
-    for i = 1, #list do
-        list[i](event, ...)
-    end
+    if list then Dispatch(list, event, ...) end
 end)
 
 function MB:On(message, fn)
@@ -93,10 +106,7 @@ end
 
 function MB:Fire(message, ...)
     local list = messageHandlers[message]
-    if not list then return end
-    for i = 1, #list do
-        list[i](...)
-    end
+    if list then Dispatch(list, ...) end
 end
 
 -------------------------------------------------------------------------------
@@ -171,11 +181,26 @@ MB:RegisterEvent("PLAYER_REGEN_ENABLED", function()
     if #combatOrder == 0 then return end
     local order, queue = combatOrder, combatQueue
     combatOrder, combatQueue = {}, {}
+    -- Each piece of queued work on its own: one failing must not strand the
+    -- rest of what was waiting for combat to end.
     for i = 1, #order do
         local fn = queue[order[i]]
-        if fn then fn() end
+        if fn then
+            if securecall then securecall(fn) else fn() end
+        end
     end
 end)
+
+--- Where a frame sits, as an offset from the centre of the screen in screen
+--- units. Positions are stored this way so they survive a change of UI scale.
+--- Nil when the frame has no position yet.
+function MB.CentreOffset(frame)
+    local cx, cy = frame:GetCenter()
+    local ux, uy = UIParent:GetCenter()
+    if not (cx and ux) then return nil end
+    local scale = frame:GetScale()
+    return cx * scale - ux, cy * scale - uy
+end
 
 local debounced = {}
 
@@ -225,7 +250,6 @@ end
 -- Items ----------------------------------------------------------------------
 local rawItemCount = (C_Item and C_Item.GetItemCount) or _G.GetItemCount
 local rawItemInfo = (C_Item and C_Item.GetItemInfo) or _G.GetItemInfo
-local rawItemIcon = (C_Item and C_Item.GetItemIconByID) or _G.GetItemIcon
 
 --- Number of an item carried in the bags (bank and charges excluded), or nil
 --- when the client will not say. Nil is not zero, and nothing may treat it as
@@ -256,12 +280,6 @@ function API.ItemMinLevel(itemID)
     return API.Num(minLevel)
 end
 
-function API.ItemIcon(itemID)
-    if not rawItemIcon then return nil end
-    local icon = rawItemIcon(itemID)
-    if IsSecret(icon) then return nil end
-    return icon
-end
 
 function API.RequestItem(itemID)
     if C_Item and C_Item.RequestLoadItemDataByID then
@@ -365,7 +383,9 @@ end
 -- which looks exactly like having run out of everything.
 --
 --   * A loading screen closes the gate: nothing is read until it is over.
---   * The gate opens when an item can actually be read out of a bag slot.
+--   * The gate opens when an item can actually be read out of a bag slot and
+--     the count of that same item agrees it is there. The backpack reporting
+--     its slots is not enough: it does that while their contents are unknown.
 --   * A read that finds no item anywhere is not believed straight away. The
 --     counts stay as they were while the bags are asked again, and only bags
 --     that go on reading empty are taken to be empty.
@@ -379,6 +399,7 @@ local SETTLE_STEP = 0.5    -- how often the bags are asked after that
 local SETTLE_TRIES = 16    -- asks after a loading screen before empty bags are believed
 local DOUBT_TRIES = 4      -- the same when nothing explains why they read empty
 local LOADING_LIMIT = 90   -- a loading screen older than this is taken to be over
+local WITNESSES = 3        -- items asked about before the counts are doubted
 
 MB.inventoryReady = false
 
@@ -418,16 +439,25 @@ end
 --- Whether a read made at this moment could be believed. "ok" needs two
 --- things to agree: a bag slot gives up an item, and the count of that very
 --- item says it is there. "empty" is no slot giving up anything; "refused" is
---- the bags showing an item that the counts deny or will not give.
+--- the bags showing items that the counts deny or will not give. A few items
+--- are asked about before the counts are doubted, so one odd item at the top
+--- of the backpack cannot hold everything up.
 local function Probe()
-    local witness = API.AnyBagItem()
-    if not witness then
-        return believedEmpty and "ok" or "empty"
+    local denied = 0
+    for bag = 0, MB.LAST_BAG do
+        for slot = 1, API.BagSlots(bag) do
+            local itemID = API.BagItemID(bag, slot)
+            if itemID then
+                believedEmpty = false
+                local count = API.ItemCount(itemID)
+                if count and count >= 1 then return "ok" end
+                denied = denied + 1
+                if denied >= WITNESSES then return "refused" end
+            end
+        end
     end
-    believedEmpty = false
-    local count = API.ItemCount(witness)
-    if not count or count < 1 then return "refused" end
-    return "ok"
+    if denied > 0 then return "refused" end
+    return believedEmpty and "ok" or "empty"
 end
 
 --- Reads every tracked count and keeps the lot or none of it. Returns "ok"

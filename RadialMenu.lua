@@ -21,6 +21,7 @@ local LABELS = {
     trade = "Trade",
 }
 local SUB_REAGENT = { portals = "runeP", teleports = "runeT" }
+local CONJURED = { "water", "food" }
 local FALLBACK_ICON = {
     portals = "Interface\\Icons\\Spell_Arcane_PortalStormWind",
     teleports = "Interface\\Icons\\Spell_Arcane_TeleportStormWind",
@@ -183,12 +184,9 @@ function Radial:StopDrag()
     orb.dragging = nil
     orb:StopMovingOrSizing()
 
-    local cx, cy = orb:GetCenter()
-    local ux, uy = UIParent:GetCenter()
-    if cx and ux then
-        local scale = orb:GetScale()
-        MB.db.orb.x = cx * scale - ux
-        MB.db.orb.y = cy * scale - uy
+    local x, y = MB.CentreOffset(orb)
+    if x then
+        MB.db.orb.x, MB.db.orb.y = x, y
     end
     MB:AfterCombat("radial-layout", function()
         Radial:ApplyPosition()
@@ -287,7 +285,6 @@ end
 
 --- Visual state: available buttons are bright, unavailable ones are greyed.
 local function SetButtonState(button, available, selected)
-    button.available = available
     button.icon:SetDesaturated(not available)
     button.icon:SetAlpha(available and 1 or 0.4)
     if selected then
@@ -506,10 +503,12 @@ end
 -- Refresh
 -------------------------------------------------------------------------------
 --- Icons, counts and state colours. Safe at any time, including in combat.
+--- Nothing here can be seen while the menu is closed, and opening it comes
+--- straight back here, so a closed menu is left alone.
 function Radial:RefreshVisuals()
-    if not menu then return end
+    if not menu or not menu:IsShown() then return end
 
-    for _, kind in ipairs({ "water", "food" }) do
+    for _, kind in ipairs(CONJURED) do
         local button = buttons[kind]
         button.icon:SetTexture(Conjuring:Icon(kind))
         SetButtonState(button, Conjuring:GetSpell(kind) ~= nil)

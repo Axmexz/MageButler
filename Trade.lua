@@ -22,6 +22,8 @@ local VERIFY_WAIT = 0.4  -- how long the trade window gets to show a stack
 -- Classes with their own row in the trade settings, in display order.
 Trade.CLASSES = MB.Config.CLASSES
 
+local KINDS = { "water", "food" }
+
 local tradeOpen = false
 local autoBlocked = false
 local job
@@ -211,7 +213,7 @@ local function Finish(problem)
     -- What could not be offered: either there was none left, or what is left
     -- is a rank the partner's level cannot use.
     local shortfall, missingKinds, tooLow = {}, {}, {}
-    for _, kind in ipairs({ "water", "food" }) do
+    for _, kind in ipairs(KINDS) do
         if done.levelBlocked[kind] then
             tooLow[#tooLow + 1] = kind
         elseif done.short[kind] > 0 then

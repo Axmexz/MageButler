@@ -16,6 +16,7 @@ local IsSecret = MB.IsSecret
 local Theme, Spells, Reagents
 
 local INTELLECT_ID, BRILLIANCE_ID = 1459, 23028
+local BUFF_IDS = { INTELLECT_ID, BRILLIANCE_ID }
 
 -- Relative strength of each rank, so a weaker buff can be told from an equal one.
 local STRENGTH = {
@@ -65,6 +66,7 @@ local state = {
     note = nil,
 }
 
+local records = {}        -- [unit] = that unit's record, kept and filled in again each time
 local buffNames
 local autoScope
 local applied = {}
@@ -201,7 +203,7 @@ local function AurasRestricted()
     if not restricted then return false end
     -- Individual spells can stay readable under a general restriction.
     if secrets.ShouldSpellAuraBeSecret then
-        for _, spellID in ipairs({ INTELLECT_ID, BRILLIANCE_ID }) do
+        for _, spellID in ipairs(BUFF_IDS) do
             local fine, secret = pcall(secrets.ShouldSpellAuraBeSecret, spellID)
             if not fine or IsSecret(secret) or secret then return true end
         end
@@ -320,16 +322,21 @@ local function Evaluate()
                         subgroup = API.Num(group)
                     end
 
-                    local record = {
-                        unit = unit,
-                        name = API.Str(UnitName(unit)) or unit,
-                        status = status,
-                        remaining = remaining,
-                        level = level,
-                        cast = cast,
-                        reachable = Reachable(unit, cast or intellect),
-                        subgroup = subgroup or 1,
-                    }
+                    -- One table per unit for the whole session, rewritten in
+                    -- full here: a raid would otherwise shed forty of them
+                    -- on every update.
+                    local record = records[unit]
+                    if not record then
+                        record = { unit = unit }
+                        records[unit] = record
+                    end
+                    record.name = API.Str(UnitName(unit)) or unit
+                    record.status = status
+                    record.remaining = remaining
+                    record.level = level
+                    record.cast = cast
+                    record.reachable = Reachable(unit, cast or intellect)
+                    record.subgroup = subgroup or 1
                     state.units[#state.units + 1] = record
                     state.byUnit[unit] = record
                     state.total = state.total + 1
@@ -518,8 +525,10 @@ local function StatusColor(record)
     return Theme:Color("ok")
 end
 
+--- Names and colours in the player list. A closed list is left alone: it is
+--- brought up to date as it opens.
 local function RefreshList()
-    if not listPanel then return end
+    if not listPanel or not list:IsShown() then return end
 
     local shown = 0
     for i = 1, #unitButtons do
@@ -678,10 +687,12 @@ local function ScheduleExpiryCheck()
     end)
 end
 
+--- Reads the group and redraws. Returns false in combat, where it is put off
+--- until combat ends and nothing has been redrawn.
 function BuffWatch:Update()
     if InCombatLockdown() then
         dirty = true
-        return
+        return false
     end
     dirty = false
     Evaluate()
@@ -690,6 +701,11 @@ function BuffWatch:Update()
     ScheduleExpiryCheck()
     self:RefreshVisuals()
     MB:Fire("BUFFWATCH_UPDATED")
+    return true
+end
+
+local function RunUpdate()
+    BuffWatch:Update()
 end
 
 function BuffWatch:Queue()
@@ -697,9 +713,7 @@ function BuffWatch:Queue()
         dirty = true
         return
     end
-    MB:Debounce("buffwatch", 0.25, function()
-        BuffWatch:Update()
-    end)
+    MB:Debounce("buffwatch", 0.25, RunUpdate)
 end
 
 -------------------------------------------------------------------------------
@@ -914,12 +928,9 @@ local function CreateList()
         if not listPanel.dragging then return end
         listPanel.dragging = nil
         list:StopMovingOrSizing()
-        local cx, cy = list:GetCenter()
-        local ux, uy = UIParent:GetCenter()
-        if cx and ux then
-            local scale = list:GetScale()
-            MB.db.buffwatch.x = cx * scale - ux
-            MB.db.buffwatch.y = cy * scale - uy
+        local x, y = MB.CentreOffset(list)
+        if x then
+            MB.db.buffwatch.x, MB.db.buffwatch.y = x, y
         end
     end)
 
@@ -985,21 +996,7 @@ end
 local function CreateIndicators()
     local orb = MB.RadialMenu.orb
 
-    pip = CreateFrame("Button", nil, orb)
-    pip:SetSize(16, 16)
-    pip:SetPoint("CENTER", orb, "TOPRIGHT", -6, -6)
-    pip:SetFrameLevel(orb:GetFrameLevel() + 5)
-
-    pip.rim = pip:CreateTexture(nil, "BACKGROUND")
-    pip.rim:SetTexture(MB.MEDIA .. "Circle.tga")
-    pip.rim:SetAllPoints()
-    pip.rim:SetVertexColor(0.02, 0.04, 0.09)
-
-    pip.dot = pip:CreateTexture(nil, "ARTWORK")
-    pip.dot:SetTexture(MB.MEDIA .. "Circle.tga")
-    pip.dot:SetPoint("TOPLEFT", 3, -3)
-    pip.dot:SetPoint("BOTTOMRIGHT", -3, 3)
-
+    pip = Theme:CreatePip(orb, "TOPRIGHT", -6, -6)
     pip:SetScript("OnClick", function()
         BuffWatch:ToggleList()
     end)
@@ -1031,22 +1028,23 @@ function BuffWatch:OnEnable()
     MB:RegisterEvent("UNIT_CONNECTION", OnUnitEvent)
     MB:RegisterEvent("UNIT_FLAGS", OnUnitEvent)
 
-    -- The game going through with a cast, or refusing to.
-    MB:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", function(_, unit, _, spellID)
-        if unit ~= "player" or not awaiting then return end
-        if API.Num(spellID) == awaiting.action.spell then
+    -- The game going through with a cast, or refusing to. Asked for the
+    -- player alone: these fire for every unit in sight otherwise, and for
+    -- anyone else the client may hand over secret values that cannot even be
+    -- compared.
+    MB:RegisterPlayerEvent("UNIT_SPELLCAST_SUCCEEDED", function(_, _, _, spellID)
+        if awaiting and API.Num(spellID) == awaiting.action.spell then
             ReportCast(true)
         end
     end)
-    local function CastStopped(_, unit, _, spellID)
-        if unit ~= "player" or not awaiting then return end
-        if API.Num(spellID) == awaiting.action.spell then
+    local function CastStopped(_, _, _, spellID)
+        if awaiting and API.Num(spellID) == awaiting.action.spell then
             ReportCast(false)
         end
     end
-    MB:RegisterEvent("UNIT_SPELLCAST_FAILED", CastStopped)
-    MB:RegisterEvent("UNIT_SPELLCAST_FAILED_QUIET", CastStopped)
-    MB:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED", CastStopped)
+    MB:RegisterPlayerEvent("UNIT_SPELLCAST_FAILED", CastStopped)
+    MB:RegisterPlayerEvent("UNIT_SPELLCAST_FAILED_QUIET", CastStopped)
+    MB:RegisterPlayerEvent("UNIT_SPELLCAST_INTERRUPTED", CastStopped)
 
     MB:RegisterEvent("GROUP_ROSTER_UPDATE", function()
         RefreshList() -- names can change even while combat blocks a full update
@@ -1090,7 +1088,9 @@ function BuffWatch:OnEnable()
                 list:Hide()
             end
         end)
-        BuffWatch:Update()
-        BuffWatch:RefreshVisuals()
+        -- In combat the update is put off, and the display alone is redrawn.
+        if not BuffWatch:Update() then
+            BuffWatch:RefreshVisuals()
+        end
     end)
 end

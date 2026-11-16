@@ -13,9 +13,11 @@ local ROW_HEIGHT = 18
 local MAX_ROWS = 7
 local PANEL_TOP, PANEL_BOTTOM = 30, 14   -- room above the first row and below the last
 
+local KINDS = { "water", "food", "gem" }
 local LABELS = { water = "Water", food = "Food", gem = "Mana Gem" }
 
 local items = {}
+local rows = {}   -- the tables behind `items`, kept and filled in again each time
 local overall = "off"
 local pip, panel
 local wasInInstance = false
@@ -25,7 +27,14 @@ local wasInInstance = false
 -------------------------------------------------------------------------------
 local function Add(label, have, want, state)
     if state == "off" then return end
-    items[#items + 1] = { label = label, have = have, want = want, state = state }
+    local index = #items + 1
+    local item = rows[index]
+    if not item then
+        item = {}
+        rows[index] = item
+    end
+    item.label, item.have, item.want, item.state = label, have, want, state
+    items[index] = item
 end
 
 local function Evaluate()
@@ -35,7 +44,7 @@ local function Evaluate()
 
     -- Only what the player asked to be told about.
     local want = MB.db.readiness.items
-    for _, kind in ipairs({ "water", "food", "gem" }) do
+    for _, kind in ipairs(KINDS) do
         if want[kind] then
             Add(LABELS[kind], Conjuring:Count(kind), Conjuring:Target(kind), Conjuring:State(kind))
         end
@@ -90,9 +99,8 @@ local function Shortfalls()
     return table.concat(parts, ", ")
 end
 
-function Readiness:AddTooltipLines(tooltip)
-    if overall == "off" then return end
-    tooltip:AddLine(" ")
+--- The verdict and one line for each thing counted, as a tooltip shows them.
+local function AddResultLines(tooltip)
     local r, g, b = Theme:StateColor(overall)
     tooltip:AddLine("Preparation: " .. Headline(), r, g, b)
     for i = 1, #items do
@@ -100,6 +108,12 @@ function Readiness:AddTooltipLines(tooltip)
         local ir, ig, ib = Theme:StateColor(item.state)
         tooltip:AddDoubleLine(item.label, item.have .. " / " .. item.want, 0.88, 0.92, 1, ir, ig, ib)
     end
+end
+
+function Readiness:AddTooltipLines(tooltip)
+    if overall == "off" then return end
+    tooltip:AddLine(" ")
+    AddResultLines(tooltip)
 end
 
 --- Shows the result as a toast; `verbose` also lists every line in chat.
@@ -195,12 +209,9 @@ local function CreatePanel()
         if not self.dragging then return end
         self.dragging, self.justDragged = nil, true
         self:StopMovingOrSizing()
-        local cx, cy = self:GetCenter()
-        local ux, uy = UIParent:GetCenter()
-        if cx and ux then
-            local scale = self:GetScale()
-            MB.db.readiness.x = cx * scale - ux
-            MB.db.readiness.y = cy * scale - uy
+        local x, y = MB.CentreOffset(self)
+        if x then
+            MB.db.readiness.x, MB.db.readiness.y = x, y
         end
     end)
     -- Click anywhere on the checklist to dismiss it, unless that click was
@@ -250,34 +261,13 @@ function Readiness:TogglePanel()
 end
 
 local function CreatePip()
-    local orb = MB.RadialMenu.orb
-    pip = CreateFrame("Button", nil, orb)
-    pip:SetSize(16, 16)
-    pip:SetPoint("CENTER", orb, "BOTTOMRIGHT", -6, 6)
-    pip:SetFrameLevel(orb:GetFrameLevel() + 5)
-
-    pip.rim = pip:CreateTexture(nil, "BACKGROUND")
-    pip.rim:SetTexture(MB.MEDIA .. "Circle.tga")
-    pip.rim:SetAllPoints()
-    pip.rim:SetVertexColor(0.02, 0.04, 0.09)
-
-    pip.dot = pip:CreateTexture(nil, "ARTWORK")
-    pip.dot:SetTexture(MB.MEDIA .. "Circle.tga")
-    pip.dot:SetPoint("TOPLEFT", 3, -3)
-    pip.dot:SetPoint("BOTTOMRIGHT", -3, 3)
-
+    pip = Theme:CreatePip(MB.RadialMenu.orb, "BOTTOMRIGHT", -6, 6)
     pip:SetScript("OnClick", function()
         Readiness:TogglePanel()
     end)
     Theme:RoundTooltip(pip, function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        local r, g, b = Theme:StateColor(overall)
-        GameTooltip:AddLine("Preparation: " .. Headline(), r, g, b)
-        for i = 1, #items do
-            local item = items[i]
-            local ir, ig, ib = Theme:StateColor(item.state)
-            GameTooltip:AddDoubleLine(item.label, item.have .. " / " .. item.want, 0.88, 0.92, 1, ir, ig, ib)
-        end
+        AddResultLines(GameTooltip)
         GameTooltip:AddLine("Click for the checklist", 0.56, 0.63, 0.79)
         GameTooltip:Show()
     end)
@@ -298,7 +288,6 @@ local function Update()
         panel:Hide()
     end
     UpdatePanel()
-    MB:Fire("READINESS_UPDATED")
 end
 
 -------------------------------------------------------------------------------

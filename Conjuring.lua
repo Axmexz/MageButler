@@ -150,16 +150,23 @@ function Conjuring:MinLevel(itemID)
     return API.ItemMinLevel(itemID) or MIN_LEVEL[itemID] or 1
 end
 
---- Conjured items of a kind, best first, for the trade assistant.
+local bestFirst = {}
+
+--- Conjured items of a kind, best first, for the trade assistant. The lists
+--- never change, so each is built once; they are for reading only.
 function Conjuring:ItemsBestFirst(kind)
+    local list = bestFirst[kind]
+    if list then return list end
+
     local source = (kind == "water") and WATER or FOOD
-    local list = {}
+    list = {}
     for i = #source, 1, -1 do
         list[#list + 1] = source[i]
     end
     for i = 1, #SHARED do
         list[#list + 1] = SHARED[i]
     end
+    bestFirst[kind] = list
     return list
 end
 

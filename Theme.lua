@@ -183,6 +183,26 @@ function Theme:SkinRound(button)
     return button
 end
 
+--- A small status light on the rim of the orb: a dark disc with a coloured
+--- dot in it. `point` is the corner of the orb it sits on.
+function Theme:CreatePip(orb, point, x, y)
+    local pip = CreateFrame("Button", nil, orb)
+    pip:SetSize(16, 16)
+    pip:SetPoint("CENTER", orb, point, x, y)
+    pip:SetFrameLevel(orb:GetFrameLevel() + 5)
+
+    pip.rim = pip:CreateTexture(nil, "BACKGROUND")
+    pip.rim:SetTexture(MB.MEDIA .. "Circle.tga")
+    pip.rim:SetAllPoints()
+    pip.rim:SetVertexColor(0.02, 0.04, 0.09)
+
+    pip.dot = pip:CreateTexture(nil, "ARTWORK")
+    pip.dot:SetTexture(MB.MEDIA .. "Circle.tga")
+    pip.dot:SetPoint("TOPLEFT", 3, -3)
+    pip.dot:SetPoint("BOTTOMRIGHT", -3, 3)
+    return pip
+end
+
 --- A themed text button for panels.
 function Theme:CreateButton(parent, label, width, height)
     local button = CreateFrame("Button", nil, parent, "BackdropTemplate")

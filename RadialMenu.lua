@@ -752,7 +752,9 @@ function Radial:RefreshGlow()
     -- In combat Buff Watch stops reading buffs but keeps its last picture,
     -- and that picture goes on being shown: a player who went into the fight
     -- without Intellect is still without it. It is read afresh as combat ends.
-    local buffs = watch and watch:GetOverall()
+    -- Switched off, though, it has no say at all, in combat or out of it.
+    local watching = MB.db.general.enabled and MB.db.buffwatch.enabled
+    local buffs = watching and watch and watch:GetOverall()
     local supplies = ready and ready:GetOverall()
     local buffsNeed = buffs == "low" or buffs == "none"
     local attention = MB.db.general.enabled and (buffsNeed or supplies == "low" or supplies == "none")
@@ -881,7 +883,9 @@ function Radial:OnEnable()
             if IsControlKeyDown() then
                 if not down then
                     local list = self:GetFrameRef("bufflist")
-                    if list then
+                    -- Opened only while Buff Watch is on; one that is open
+                    -- can always be closed.
+                    if list and (self:GetAttribute("mbbufflist") or list:IsShown()) then
                         if list:IsShown() then list:Hide() else list:Show() end
                     end
                 end

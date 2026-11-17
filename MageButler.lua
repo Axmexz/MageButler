@@ -655,6 +655,14 @@ local function LoadingStarted(event)
     loading, loadingSince = true, GetTime()
     believedEmpty = false
     Close(event)
+    -- The hold's own timer: if nothing at all has touched the gate by the
+    -- time a loading screen must be over, it asks for itself.
+    local token = askToken
+    C_Timer.After(LOADING_LIMIT, function()
+        if loading and token == askToken then
+            MB:RefreshInventory(false, "loading limit")
+        end
+    end)
 end
 
 --- The world is back. PLAYER_ENTERING_WORLD says so for a change of map and

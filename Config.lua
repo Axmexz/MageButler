@@ -228,6 +228,32 @@ local function MigrateTrade(profile)
     trade.presets, trade.classes, trade.classAware = nil, nil, nil
 end
 
+--- Keeps a number inside the range its slider allows. A value outside it can
+--- only come from a damaged or hand-edited settings file, and some of them
+--- (a UI scale of 0) would leave the orb unplaced.
+local function Clamp(section, key, low, high, default)
+    local value = section[key]
+    if type(value) ~= "number" or value ~= value or value < low or value > high then
+        section[key] = (type(value) == "number" and value == value)
+            and math.min(high, math.max(low, value)) or default
+    end
+end
+
+--- Called on a profile once the defaults are in. A valid profile is untouched.
+local function Sanitise(profile, defaults)
+    Clamp(profile.general, "uiScale", 0.6, 1.6, defaults.general.uiScale)
+    Clamp(profile.radial, "radius", 50, 140, defaults.radial.radius)
+    Clamp(profile.radial, "buttonSize", 28, 56, defaults.radial.buttonSize)
+    Clamp(profile.appearance, "panelAlpha", 0.5, 1, defaults.appearance.panelAlpha)
+    for _, name in ipairs({ "buffwatch", "readiness" }) do
+        local section = profile[name]
+        if type(section.x) ~= "number" or type(section.y) ~= "number" then
+            section.x, section.y = nil, nil
+        end
+    end
+    return profile
+end
+
 --- Settings that no longer exist are dropped, so a profile written by an
 --- older version does not carry them around for ever.
 ---   * The inventory HUD was removed: its stored position, its per-counter
@@ -276,7 +302,7 @@ function Config:Init()
     end
     MigrateTrade(root.chars[self.key])
     DropRetired(root.chars[self.key])
-    MB.db = ApplyDefaults(root.chars[self.key], self.defaults)
+    MB.db = Sanitise(ApplyDefaults(root.chars[self.key], self.defaults), self.defaults)
 end
 
 function Config:ResetTradeAmounts()
@@ -303,7 +329,7 @@ function Config:CopyFrom(key)
     MigrateTrade(copy)
     DropRetired(copy)
     self.root.chars[self.key] = copy
-    MB.db = ApplyDefaults(copy, self.defaults)
+    MB.db = Sanitise(ApplyDefaults(copy, self.defaults), self.defaults)
     MB:Fire("SETTINGS_CHANGED", "all")
     return true
 end

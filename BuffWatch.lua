@@ -580,6 +580,19 @@ local function StatusColor(record)
     return Theme:Color("ok")
 end
 
+--- What is known about the player holding a unit token now. Records are kept
+--- by token and are not read again in combat, so after a change of roster in
+--- a fight the one on file can belong to whoever held the token before: that
+--- is no answer for the newcomer, and none is given.
+local function RecordFor(unit)
+    local record = state.byUnit[unit]
+    if type(record) == "table" then
+        local name = API.Str(UnitName(unit))
+        if name and record.name ~= unit and record.name ~= name then return nil end
+    end
+    return record
+end
+
 --- Names and colours in the player list. A closed list is left alone: it is
 --- brought up to date as it opens.
 local function RefreshList()
@@ -593,7 +606,7 @@ local function RefreshList()
             if UnitExists(unit) then
                 shown = shown + 1
                 button.text:SetText(API.Str(UnitName(unit)) or unit)
-                local r, g, b = StatusColor(state.byUnit[unit])
+                local r, g, b = StatusColor(RecordFor(unit))
                 button.text:SetTextColor(r, g, b)
                 button.bar:SetVertexColor(r, g, b)
             end
@@ -624,6 +637,7 @@ function BuffWatch:RefreshVisuals()
             Theme:SetPulse(pip.dot, (not state.paused) and Theme:PulseForState(overall) or nil)
             pip:Show()
         else
+            Theme:SetPulse(pip.dot, nil)   -- so a later show joins the beat afresh
             pip:Hide()
         end
     end
@@ -717,6 +731,7 @@ end
 -- Updating: driven by events, never by polling
 -------------------------------------------------------------------------------
 local expiryDue   -- when the pending expiry check will run
+local sent = {}   -- what BUFFWATCH_UPDATED last reported
 
 local function ScheduleExpiryCheck()
     local db = MB.db.buffwatch
@@ -769,7 +784,13 @@ function BuffWatch:Update()
     ApplyAttributes()
     ScheduleExpiryCheck()
     self:RefreshVisuals()
-    MB:Fire("BUFFWATCH_UPDATED")
+    -- Told only when what others go by has changed: updates come several
+    -- times a second in a group, and most of them change nothing.
+    local overall, have, total, paused = self:GetOverall(), Buffed(), state.total, state.paused
+    if overall ~= sent.overall or have ~= sent.have or total ~= sent.total or paused ~= sent.paused then
+        sent.overall, sent.have, sent.total, sent.paused = overall, have, total, paused
+        MB:Fire("BUFFWATCH_UPDATED")
+    end
     return true
 end
 
@@ -888,7 +909,7 @@ end
 -- Player list: fixed secure unit buttons, usable in combat
 -------------------------------------------------------------------------------
 local function UnitTooltip(self)
-    local record = state.byUnit[self.unit]
+    local record = RecordFor(self.unit)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     local r, g, b = StatusColor(record)
     GameTooltip:AddLine(API.Str(UnitName(self.unit)) or self.unit, r, g, b)
@@ -1097,6 +1118,7 @@ function BuffWatch:OnEnable()
 
     local function OnUnitEvent(_, unit)
         if IsSecret(unit) or not tracked[unit] then return end
+        if not state.active then return end   -- nothing is being watched
         BuffWatch:Queue()
     end
     MB:RegisterEvent("UNIT_AURA", OnUnitEvent)
@@ -1160,7 +1182,10 @@ function BuffWatch:OnEnable()
     MB:On("SETTINGS_CHANGED", function()
         MB:AfterCombat("buffwatch-layout", function()
             BuffWatch:PositionList()
-            if not (MB.db.general.enabled and MB.db.buffwatch.enabled) then
+            local on = MB.db.general.enabled and MB.db.buffwatch.enabled
+            -- The orb's Ctrl+right-click reads this before it opens the list.
+            MB.RadialMenu.orb:SetAttribute("mbbufflist", on and true or nil)
+            if not on then
                 list:Hide()
             end
         end)

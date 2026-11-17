@@ -144,7 +144,7 @@ end
 --- the whole amount (the smallest that does), otherwise the largest. Returns
 --- bag, slot, itemID, stackCount - or nil, whether a stack exists but is
 --- locked right now, and whether everything carried is too strong for them.
-local function FindSource(kind, need, maxLevel)
+local function FindSource(kind, need, maxLevel, given)
     local wanted, tooHigh = ChooseRank(kind, maxLevel)
     if not wanted then return nil, false, tooHigh end
 
@@ -156,7 +156,9 @@ local function FindSource(kind, need, maxLevel)
             local itemID, count, isLocked = API.BagItem(bag, slot)
             if itemID == wanted then
                 if isLocked then
-                    locked = true
+                    -- A stack this job has itself put in the trade stays locked
+                    -- in the bag: that is not one worth waiting for.
+                    if not (given and given[bag * 100 + slot]) then locked = true end
                 else
                     if count >= need and (not coverCount or count < coverCount) then
                         coverBag, coverSlot, coverCount = bag, slot, count
@@ -215,6 +217,15 @@ local function Finish(problem)
     local done = job
     job = nil
     if not done then return end
+
+    -- Started on counts that could not be read, and nothing went in: no
+    -- claim is made about what is or is not carried.
+    if done.unsure and not problem and done.placed.water == 0 and done.placed.food == 0 then
+        if done.manual then
+            MB:Notify("Trade: your bags cannot be read just now. Try Fill Trade again in a moment.", "warn")
+        end
+        return
+    end
 
     local parts = {}
     if done.placed.water > 0 then parts[#parts + 1] = done.placed.water .. " Water" end
@@ -303,9 +314,15 @@ Step = function()
         if #pending == 0 then
             return Finish(current.problem)
         end
-        current.verifyWaits = current.verifyWaits + 1
-        if current.verifyWaits > 4 then
-            return Finish(current.problem or "the trade window did not accept every stack.")
+        -- Only a wait that ran out counts against the fill; a step brought
+        -- on by the window changing is news, not a timeout.
+        if current.nudged then
+            current.nudged = nil
+        else
+            current.verifyWaits = current.verifyWaits + 1
+            if current.verifyWaits > 4 then
+                return Finish(current.problem or "the trade window did not accept every stack.")
+            end
         end
         return Continue(VERIFY_WAIT)
     end
@@ -331,7 +348,7 @@ Step = function()
             return Verify("your cursor is holding something, so nothing more was moved.")
         end
 
-        local bag, slot, itemID, count = FindSource(kind, need[kind], current.maxLevel)
+        local bag, slot, itemID, count = FindSource(kind, need[kind], current.maxLevel, current.given)
         if not bag then
             local locked, tooHigh = slot, itemID
             if locked and current.lockWaits < 12 then
@@ -398,6 +415,7 @@ Step = function()
 
             -- Sent. The next stack follows a frame later; nothing waits on the server here.
             current.used[tradeSlot] = true
+            current.given[bag * 100 + slot] = true
             current.sent[kind] = current.sent[kind] + amount
             current.pending[#current.pending + 1] = { slot = tradeSlot, kind = kind, amount = amount }
             return Continue(STEP_GAP)
@@ -408,7 +426,7 @@ end
 local function StartJob(manual)
     if job or not tradeOpen then return end
     -- Which rank is carried comes from the counts, so they are read afresh.
-    MB:RefreshInventory(false, "trade")
+    local counted = MB:RefreshInventory(false, "trade")
     local wantWater, wantFood = Trade:GetAmounts()
 
     local water, food = Offered()
@@ -434,6 +452,8 @@ local function StartJob(manual)
         lockWaits = 0,
         failures = 0,
         verifyWaits = 0,
+        given = {},
+        unsure = not counted,
     }
     Step()
 end
@@ -550,6 +570,7 @@ function Trade:OnEnable()
     -- absent job is never restarted by a change to the window.
     MB:RegisterEvent("TRADE_PLAYER_ITEM_CHANGED", function()
         if job and job.verifying then
+            job.nudged = true
             Continue(STEP_GAP)
         end
     end)
@@ -571,7 +592,12 @@ function Trade:OnEnable()
     MB:RegisterEvent("ADDON_ACTION_BLOCKED", OnBlocked)
     MB:RegisterEvent("ADDON_ACTION_FORBIDDEN", OnBlocked)
 
-    MB:On("SETTINGS_CHANGED", function()
+    MB:On("SETTINGS_CHANGED", function(section)
+        -- A profile reset or copied brings its own answer to whether this
+        -- client refused automatic filling.
+        if section == "all" then
+            autoBlocked = (Trade.build ~= "" and MB.db.trade.blockedBuild == Trade.build)
+        end
         if fillButton then UpdateFillButton() end
     end)
 end

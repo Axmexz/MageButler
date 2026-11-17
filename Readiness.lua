@@ -130,10 +130,15 @@ function Readiness:Report(verbose)
         end
         return
     end
-    if overall == "ok" then
-        MB.Theme:Toast("Preparation: ready.", "ok")
+    -- Through Notify, so "Repeat notifications in chat" covers it like every
+    -- other message; except when the full list is about to be printed
+    -- anyway, where chat would get the summary twice.
+    local text = (overall == "ok") and "Preparation: ready." or ("Preparation: " .. Shortfalls() .. ".")
+    local kind = (overall == "ok") and "ok" or (overall == "none" and "bad" or "warn")
+    if verbose then
+        MB.Theme:Toast(text, kind)
     else
-        MB.Theme:Toast("Preparation: " .. Shortfalls() .. ".", overall == "none" and "bad" or "warn")
+        MB:Notify(text, kind)
     end
     if verbose then
         MB:Print("preparation - " .. Headline() .. ":")
@@ -284,6 +289,7 @@ local function Update()
     Evaluate()
     if pip then
         if overall == "off" then
+            Theme:SetPulse(pip.dot, nil)   -- so a later show joins the beat afresh
             pip:Hide()
         else
             pip.dot:SetVertexColor(Theme:StateColor(overall))
@@ -320,10 +326,11 @@ function Readiness:OnEnable()
     end)
 
     -- Walking into a dungeon or raid short of supplies: say so once.
-    MB:RegisterEvent("PLAYER_ENTERING_WORLD", function()
+    MB:RegisterEvent("PLAYER_ENTERING_WORLD", function(_, _, isReloadingUi)
         local inInstance, kind = IsInInstance()
         local inside = inInstance and (kind == "party" or kind == "raid") or false
-        local entered = inside and not wasInInstance
+        -- A reload inside an instance is not walking into it.
+        local entered = inside and not wasInInstance and not (isReloadingUi == true)
         wasInInstance = inside
         if not entered then return end
         -- Only once the bags answer again: straight after a loading screen

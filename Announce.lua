@@ -296,7 +296,11 @@ local function CanStartNow(spellID)
     if C_Spell and C_Spell.GetSpellCooldown then
         local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
         if not ok or MB.IsSecret(info) then return false end
-        if type(info) == "table" then
+        local active = type(info) == "table" and info.isActive
+        if type(active) == "boolean" and not MB.IsSecret(active) then
+            -- Said outright, and readable where the duration is withheld.
+            if active then return false end
+        elseif type(info) == "table" then
             local duration = info.duration
             if MB.IsSecret(duration) then return false end
             if type(duration) == "number" and duration > 0 then return false end
@@ -362,9 +366,14 @@ function Announce:OnEnable()
     MB:RegisterEvent("ADDON_ACTION_BLOCKED", OnBlocked)
     MB:RegisterEvent("ADDON_ACTION_FORBIDDEN", OnBlocked)
 
-    MB:On("SETTINGS_CHANGED", function()
-        if offered and not (MB.db.announce.enabled and MB:IsActive()) then
+    -- An offer is for the place and the settings it was made under: a change
+    -- to the announcements withdraws it, and so does a loading screen.
+    MB:On("SETTINGS_CHANGED", function(section)
+        if offered and (section == "announce" or section == "all"
+            or not (MB.db.announce.enabled and MB:IsActive())) then
             HideOffer()
         end
     end)
+    MB:RegisterEvent("LOADING_SCREEN_ENABLED", HideOffer)
+    MB:RegisterEvent("PLAYER_LEAVING_WORLD", HideOffer)
 end

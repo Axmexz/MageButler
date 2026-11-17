@@ -1097,7 +1097,7 @@ local function CreateWelcome()
     closing:SetWordWrap(true)
     closing:SetSpacing(3)
     closing:SetTextColor(Theme:Color("dim"))
-    closing:SetText("Out of the box it restocks your reagents at vendors, fills trades with food and water, and keeps an eye on your group's Intellect. Older ranks are what lower-level players can eat and drink, and reagents stay untouched until you are high enough to use them.")
+    closing:SetText("Out of the box it restocks your reagents at vendors and keeps an eye on your group's Intellect. A trade is filled with the rank of food and water the other player is high enough to eat and drink, and reagents stay untouched until you are high enough to use them.")
 
     ---------------------------------------------------------------------------
     -- The choices, under the greeting rather than behind a second page.

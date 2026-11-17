@@ -796,12 +796,14 @@ builders.announce = function(page)
         "Says in chat that your portal is open. A portal that is interrupted or cancelled is never announced, and one cast is announced once.",
         Field("announce", announce, "enabled"))
     --- The channel for one of the two places, with a word on how it is said there.
+    local HOW_X = 222   -- just past the cycle button, which ends at 210
     local function Channel(y, key, where, how)
         Label(page, 0, y - 4, "Announce in", 12, nil, 86)
         Cycle(page, 92, y, 118, "Announce in",
             "Where your portal is announced " .. where .. ". Party and raid chat only reach your group, and nothing is said when the channel would reach nobody.",
             Announce.CHANNELS, Field("announce", announce, key))
-        Label(page, 222, y - 5, how, 10, "dim")
+        -- Held inside the page: uncapped, this ran past the right edge.
+        Label(page, HOW_X, y - 5, how, 10, "dim", PAGE_WIDTH - HOW_X)
     end
 
     -- Where the game lets an addon speak unprompted: said as the portal opens.
@@ -814,7 +816,7 @@ builders.announce = function(page)
 
     -- Where /say and /yell need the player's own click.
     Header(page, -188, "Out in the World")
-    Channel(-212, "channelWorld", "out in the world", "/say and /yell need your own click here")
+    Channel(-212, "channelWorld", "out in the world", "/say and /yell need your click")
     Checkbox(page, 0, -238, "Announce as I start casting",
         "Ticked, it is said as you click the destination in MageButler's menu, before the cast has finished, in the words below. Nothing is said if the spell is on cooldown or you are moving. Unticked, a button appears when the portal opens and your click on it sends the message above. A portal cast any other way always gets the button.",
         Field("announce", announce, "atStart"))

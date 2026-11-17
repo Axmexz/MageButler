@@ -668,10 +668,22 @@ function Theme:Toast(message, kind, replace)
         wipe(lines)
         toast.kind = nil
     end
-    while #lines >= 3 do
-        table.remove(lines, 1)
+    -- A message the toast is already showing is not written under itself: it
+    -- is simply shown again, for its full time, at the size it already has.
+    -- Repeated warnings would otherwise pile up into a wall of the same line.
+    local repeated = false
+    for i = 1, #lines do
+        if lines[i] == message then
+            repeated = true
+            break
+        end
     end
-    lines[#lines + 1] = message
+    if not repeated then
+        while #lines >= 3 do
+            table.remove(lines, 1)
+        end
+        lines[#lines + 1] = message
+    end
     toast.lastTime = now
 
     kind = kind or "info"

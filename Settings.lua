@@ -33,6 +33,23 @@ local refreshers = {}
 local builders = {}
 local capture
 
+-- The parts of the preparation check, and what each one counts. The General
+-- page and the greeting both offer them, each in its own order and wording.
+local PREP_WHAT = {
+    water = "conjured water", food = "conjured food", gem = "a mana gem",
+    intellect = "how much of your group carries Arcane Intellect",
+    runeT = "Rune of Teleportation", runeP = "Rune of Portals", powder = "Arcane Powder",
+}
+local PREP_GENERAL = {
+    { "water", "Water" }, { "food", "Food" }, { "gem", "Mana Gem" }, { "intellect", "Intellect" },
+    { "runeT", "Rune T" }, { "runeP", "Rune P" }, { "powder", "Arcane" },
+}
+
+local function PrepTip(key)
+    return "Count " .. PREP_WHAT[key]
+        .. " in the preparation check. Anything you are not high enough to use stays out of it either way."
+end
+
 local function Changed(section)
     MB:Fire("SETTINGS_CHANGED", section)
 end
@@ -411,22 +428,13 @@ builders.general = function(page)
         Field("general", readiness, "onInstance"))
 
     Label(page, 0, -216, "Count towards ready", 10, "dim")
-    local prep = {
-        { "water", "Water", "conjured water" },
-        { "food", "Food", "conjured food" },
-        { "gem", "Mana Gem", "a mana gem" },
-        { "intellect", "Intellect", "how much of your group carries Arcane Intellect" },
-        { "runeT", "Rune T", "Rune of Teleportation" },
-        { "runeP", "Rune P", "Rune of Portals" },
-        { "powder", "Arcane", "Arcane Powder" },
-    }
     local function prepItems() return MB.db.readiness.items end
-    for i = 1, #prep do
+    for i = 1, #PREP_GENERAL do
+        local key, label = PREP_GENERAL[i][1], PREP_GENERAL[i][2]
         local column = (i - 1) % 4
         local row = math.floor((i - 1) / 4)
-        Checkbox(page, column * 108, -234 - row * 24, prep[i][2],
-            "Count " .. prep[i][3] .. " in the preparation check. Anything you are not high enough to use stays out of it either way.",
-            Field("general", prepItems, prep[i][1]))
+        Checkbox(page, column * 108, -234 - row * 24, label, PrepTip(key),
+            Field("general", prepItems, key))
     end
 
     Header(page, -292, "Character Profile")
@@ -993,14 +1001,13 @@ local function prepDB() return MB.db.readiness.items end
 
 -- The preparation check's parts, in the order they are laid out: two columns,
 -- conjured supplies down the left, reagents down the right.
+-- The same parts in the greeting, in its own order and with room for the
+-- reagents' full names.
 local WELCOME_PREP = {
-    { "water", "Water", "conjured water" },
-    { "runeT", "Rune of Teleportation", "Rune of Teleportation" },
-    { "food", "Food", "conjured food" },
-    { "runeP", "Rune of Portals", "Rune of Portals" },
-    { "gem", "Mana Gem", "a mana gem" },
-    { "powder", "Arcane Powder", "Arcane Powder" },
-    { "intellect", "Intellect", "how much of your group carries Arcane Intellect" },
+    { "water", "Water" }, { "runeT", "Rune of Teleportation" },
+    { "food", "Food" }, { "runeP", "Rune of Portals" },
+    { "gem", "Mana Gem" }, { "powder", "Arcane Powder" },
+    { "intellect", "Intellect" },
 }
 
 --- A checkbox on the greeting. The settings panel's own refresh stops early
@@ -1100,11 +1107,10 @@ local function CreateWelcome()
     counts:SetText("What counts as prepared, and how much is enough")
 
     for i = 1, #WELCOME_PREP do
-        local key, label, what = WELCOME_PREP[i][1], WELCOME_PREP[i][2], WELCOME_PREP[i][3]
+        local key, label = WELCOME_PREP[i][1], WELCOME_PREP[i][2]
         local column = (i - 1) % 2
         local row = math.floor((i - 1) / 2)
-        checks[key] = WelcomeCheck(choices, 12 + column * 168, -46 - row * 24, label,
-            "Count " .. what .. " in the preparation check. Anything you are not high enough to use stays out of it either way.",
+        checks[key] = WelcomeCheck(choices, 12 + column * 168, -46 - row * 24, label, PrepTip(key),
             Field("readiness", prepDB, key))
     end
 

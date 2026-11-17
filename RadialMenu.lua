@@ -62,19 +62,19 @@ local function OrbTooltip(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     local r, g, b = Theme:Accent()
     GameTooltip:AddLine("MageButler", r, g, b)
-    GameTooltip:AddLine("Left-click: radial menu", 0.88, 0.92, 1)
+    Theme:TipLine(GameTooltip, "Left-click: radial menu", "text")
     if MB.db.buffwatch.enabled then
-        GameTooltip:AddLine("Right-click: cast the recommended buff", 0.88, 0.92, 1)
-        GameTooltip:AddLine("Ctrl+right-click: Buff Watch player list", 0.88, 0.92, 1)
+        Theme:TipLine(GameTooltip, "Right-click: cast the recommended buff", "text")
+        Theme:TipLine(GameTooltip, "Ctrl+right-click: Buff Watch player list", "text")
     end
-    GameTooltip:AddLine("Shift+right-click: settings", 0.88, 0.92, 1)
-    GameTooltip:AddLine("Middle-click: preparation check", 0.88, 0.92, 1)
+    Theme:TipLine(GameTooltip, "Shift+right-click: settings", "text")
+    Theme:TipLine(GameTooltip, "Middle-click: preparation check", "text")
     if not MB.db.general.lockPositions then
-        GameTooltip:AddLine("Drag: move", 0.56, 0.63, 0.79)
+        Theme:TipLine(GameTooltip, "Drag: move", "dim")
     end
     -- Only worth saying while the trade assistant would otherwise fill by itself.
     if MB.db.trade.enabled and MB.db.trade.shiftSkips then
-        GameTooltip:AddLine("Shift as a trade opens: no water or food is given", 0.56, 0.63, 0.79)
+        Theme:TipLine(GameTooltip, "Shift as a trade opens: no water or food is given", "dim")
     end
     if MB.BuffWatch and MB.BuffWatch.AddTooltipLines then
         MB.BuffWatch:AddTooltipLines(GameTooltip)
@@ -132,7 +132,7 @@ local function CreateOrb()
     orb.ring:SetTexture(MB.MEDIA .. "Ring.tga")
     orb.ring:SetPoint("TOPLEFT", -1, 1)
     orb.ring:SetPoint("BOTTOMRIGHT", 1, -1)
-    Theme:UseAccent(orb.ring, "SetVertexColor", 1)
+    orb.ring:SetVertexColor(Theme:Accent())   -- RefreshGlow owns its colour from here on
 
     -- Lit briefly whenever the orb or one of its buttons is clicked. It sits
     -- at the centre, where the glow has room to spread without washing over
@@ -192,6 +192,15 @@ local function CreateOrb()
     Radial.orb = orb
 end
 
+--- Puts the orb and its buttons where the settings and the screen say. Both
+--- callers queue it under one key, so they have to be the same work.
+local function Relayout()
+    MB:AfterCombat("radial-layout", function()
+        Radial:ApplyPosition()
+        Radial:Layout()
+    end)
+end
+
 --- Ends an orb drag and stores the position as an offset from screen centre.
 function Radial:StopDrag()
     if not orb.dragging then return end
@@ -202,10 +211,7 @@ function Radial:StopDrag()
     if x then
         MB.db.orb.x, MB.db.orb.y = x, y
     end
-    MB:AfterCombat("radial-layout", function()
-        Radial:ApplyPosition()
-        Radial:Layout()
-    end)
+    Relayout()
     -- If no click followed the drag, drop the marker shortly afterwards.
     C_Timer.After(0.1, function()
         MB:AfterCombat("orb-drag-marker", function()
@@ -414,10 +420,15 @@ local function CreateSub(key)
     return sub
 end
 
+--- The learned destinations behind one of the two travel buttons.
+local function TravelList(key)
+    return (key == "portals") and Spells:GetPortals() or Spells:GetTeleports()
+end
+
 --- Rebuilds one submenu from the learned spells. Out of combat only.
 local function BuildSub(key)
     local sub = subs[key]
-    local list = (key == "portals") and Spells:GetPortals() or Spells:GetTeleports()
+    local list = TravelList(key)
 
     for i = 1, #list do
         local spell = list[i]
@@ -445,7 +456,7 @@ end
 -- Tooltips
 -------------------------------------------------------------------------------
 local function AddHint(text)
-    GameTooltip:AddLine(text, 0.56, 0.63, 0.79, true)
+    Theme:TipLine(GameTooltip, text, "dim", true)
 end
 
 ButtonTooltip = function(button)
@@ -459,17 +470,17 @@ ButtonTooltip = function(button)
             GameTooltip:SetSpellByID(spellID)
         else
             GameTooltip:AddLine("Conjure " .. LABELS[key], r, g, b)
-            GameTooltip:AddLine("Not learned yet.", 1, 0.35, 0.35)
+            Theme:TipLine(GameTooltip, "Not learned yet.", "bad")
         end
         local target = Conjuring:Target(key)
         local have = Conjuring:Count(key)
         GameTooltip:AddLine(" ")
         if not MB.inventoryKnown then
-            GameTooltip:AddLine("In bags: not counted yet", 0.56, 0.63, 0.79)
+            Theme:TipLine(GameTooltip, "In bags: not counted yet", "dim")
         elseif target > 0 then
-            GameTooltip:AddLine("In bags: " .. have .. " / " .. target, 0.88, 0.92, 1)
+            Theme:TipLine(GameTooltip, "In bags: " .. have .. " / " .. target, "text")
         else
-            GameTooltip:AddLine("In bags: " .. have, 0.88, 0.92, 1)
+            Theme:TipLine(GameTooltip, "In bags: " .. have, "text")
         end
         if key == "food" and Spells:GetBest("ritual") then
             AddHint("Right-click: Ritual of Refreshment")
@@ -480,36 +491,36 @@ ButtonTooltip = function(button)
             GameTooltip:SetSpellByID(spellID)
             GameTooltip:AddLine(" ")
             if allHeld then
-                GameTooltip:AddLine("You already hold every gem you can conjure.", 0.35, 0.9, 0.55, true)
+                Theme:TipLine(GameTooltip, "You already hold every gem you can conjure.", "ok", true)
             end
         else
             GameTooltip:AddLine("Conjure Mana Gem", r, g, b)
-            GameTooltip:AddLine("Not learned yet.", 1, 0.35, 0.35)
+            Theme:TipLine(GameTooltip, "Not learned yet.", "bad")
         end
-        local item = Conjuring:GetGemItem()
+        local item = Conjuring:BestItem("gem")
         if item then
             AddHint("Right-click: use " .. (API.ItemName(item) or "your mana gem"))
         end
     elseif key == "portals" or key == "teleports" then
-        local list = (key == "portals") and Spells:GetPortals() or Spells:GetTeleports()
+        local list = TravelList(key)
         local reagent = SUB_REAGENT[key]
         GameTooltip:AddLine(LABELS[key], r, g, b)
         if #list == 0 then
-            GameTooltip:AddLine("None learned yet.", 1, 0.35, 0.35)
+            Theme:TipLine(GameTooltip, "None learned yet.", "bad")
         else
-            GameTooltip:AddLine(#list .. (#list == 1 and " destination" or " destinations"), 0.88, 0.92, 1)
+            Theme:TipLine(GameTooltip, #list .. (#list == 1 and " destination" or " destinations"), "text")
             if MB.inventoryKnown then
                 local cr, cg, cb = Theme:StateColor(Reagents:Count(reagent) > 0 and "ok" or "none")
                 GameTooltip:AddLine(Reagents:Name(reagent) .. ": " .. Reagents:Count(reagent), cr, cg, cb)
             else
-                GameTooltip:AddLine(Reagents:Name(reagent) .. ": not counted yet", 0.56, 0.63, 0.79)
+                Theme:TipLine(GameTooltip, Reagents:Name(reagent) .. ": not counted yet", "dim")
             end
             AddHint("Click to choose a destination")
         end
     elseif key == "trade" then
         GameTooltip:AddLine("Trade assistant", r, g, b)
         if MB.Trade:IsOpen() then
-            GameTooltip:AddLine(MB.Trade:DescribePreset(), 0.88, 0.92, 1)
+            Theme:TipLine(GameTooltip, MB.Trade:DescribePreset(), "text")
             AddHint("Left-click: fill the trade window")
         else
             AddHint("Left-click: trade with your target")
@@ -522,7 +533,7 @@ ButtonTooltip = function(button)
         else
             auto = "|cff8f9fc9off|r"
         end
-        GameTooltip:AddLine("Automatic filling: " .. auto, 0.88, 0.92, 1)
+        Theme:TipLine(GameTooltip, "Automatic filling: " .. auto, "text")
         AddHint("Right-click: turn automatic filling on or off")
     end
     GameTooltip:Show()
@@ -558,7 +569,7 @@ function Radial:RefreshVisuals()
     for key, reagent in pairs(SUB_REAGENT) do
         local button = buttons[key]
         local sub = subs[key]
-        local list = (key == "portals") and Spells:GetPortals() or Spells:GetTeleports()
+        local list = TravelList(key)
         button.icon:SetTexture((list[1] and list[1].icon) or FALLBACK_ICON[key])
         SetButtonState(button, #list > 0, sub:IsShown())
 
@@ -607,7 +618,7 @@ local function RefreshAttributes()
 
     local gem = buttons.gem
     local gemSpell = Conjuring:GetGemCast()
-    local gemItem = Conjuring:GetGemItem()
+    local gemItem = Conjuring:BestItem("gem")
     gem:SetAttribute("*type1", gemSpell and "spell" or nil)
     gem:SetAttribute("*spell1", gemSpell)
     gem:SetAttribute("*type2", gemItem and "item" or nil)
@@ -718,8 +729,11 @@ function Radial:ApplyBindings()
 end
 
 --- Applies every setting. Protected changes wait for combat to end.
-function Radial:Apply()
-    MB:AfterCombat("radial-apply", function()
+function Radial:Apply(section)
+    -- The orb, the buttons and the bindings only depend on the general and
+    -- menu settings: a change anywhere else redraws, and rebuilds nothing.
+    local rebuild = section == nil or section == "all" or section == "general" or section == "radial"
+    if rebuild then MB:AfterCombat("radial-apply", function()
         local general = MB.db.general
         orb:SetScale(general.uiScale)
         menu:SetScale(general.uiScale)
@@ -733,7 +747,7 @@ function Radial:Apply()
         Radial:Layout()
         RefreshAttributes()
         Radial:ApplyBindings()
-    end)
+    end) end
     self:RefreshGlow()
     self:RefreshVisuals()
 end
@@ -896,8 +910,8 @@ function Radial:OnEnable()
         return false
     ]=])
 
-    MB:On("SETTINGS_CHANGED", function()
-        Radial:Apply()
+    MB:On("SETTINGS_CHANGED", function(section)
+        Radial:Apply(section)
     end)
     MB:On("SPELLS_UPDATED", function()
         Radial:Apply()
@@ -913,12 +927,6 @@ function Radial:OnEnable()
     end)
 
     -- A different resolution or UI scale moves the screen edges.
-    local function Relayout()
-        MB:AfterCombat("radial-layout", function()
-            Radial:ApplyPosition()
-            Radial:Layout()
-        end)
-    end
     MB:RegisterEvent("DISPLAY_SIZE_CHANGED", Relayout)
     MB:RegisterEvent("UI_SCALE_CHANGED", Relayout)
     MB:RegisterEvent("TRADE_SHOW", function()

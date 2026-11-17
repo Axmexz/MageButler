@@ -24,7 +24,7 @@ function MB:NewModule(name)
 end
 
 -------------------------------------------------------------------------------
--- Events (one frame, one registration per event) and internal messages
+-- Events (one frame for all, a second for player-only unit events) and internal messages
 -------------------------------------------------------------------------------
 local eventFrame = CreateFrame("Frame")
 local eventHandlers = {}
@@ -545,7 +545,7 @@ local function ReadSnapshot(source, expected)
     return true, changed
 end
 
-local function Announce(redraw)
+local function TellModules(redraw)
     for i = 1, #MB.modules do
         local module = MB.modules[i]
         -- Each on its own: the counts are already kept, so a module that
@@ -646,7 +646,7 @@ function MB:RefreshInventory(force, source)
         Ask(0, DOUBT_TRIES, false)
         return false
     end
-    Announce(changed or force)
+    TellModules(changed or force)
     return true
 end
 

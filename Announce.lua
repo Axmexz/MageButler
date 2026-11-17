@@ -1,13 +1,17 @@
 -- MageButler - Copyright (c) 2026 Padre Pidisc. All rights reserved. See LICENSE.txt.
 -- MageButler: portal announcements.
 -- Says in chat that a portal has opened, in the player's own words, once the
--- cast has actually gone through.
+-- cast has gone through or, where the player asks for it, at the click that
+-- starts it.
 --
 -- What the game allows decides how it is said:
 --   * Party and raid chat can be sent as the portal opens.
 --   * /say and /yell may only be sent by an addon from the player's own click,
 --     except inside a dungeon or raid. Out in the world the announcement is
 --     therefore offered as a button, and the click on it is what sends it.
+--   * With "as I start casting" on, /say and /yell out in the world are said
+--     at the click on the destination in MageButler's menu, before the cast
+--     has finished. Its success is then not announced a second time.
 --   * Where the client has chat locked down for addons, the text is put in
 --     the chat box instead, for the player to send with Enter.
 -- One cast is announced once, and nothing is sent at all when the chosen
@@ -75,7 +79,7 @@ function Announce:Format(template, place, spellName)
     return Clip(text)
 end
 
---- Saves one of the two messages ("text" or "teleportText"). Emptied, it goes
+--- Saves one of the messages ("text", "startText" or "teleportText"). Emptied, it goes
 --- back to the standard wording, so there is always something to say and
 --- clearing the box is the way to get the standard text back.
 function Announce:SetMessage(key, value)

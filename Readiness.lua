@@ -280,7 +280,7 @@ local function CreatePip()
     Theme:RoundTooltip(pip, function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         AddResultLines(GameTooltip)
-        GameTooltip:AddLine("Click for the checklist", 0.56, 0.63, 0.79)
+        Theme:TipLine(GameTooltip, "Click for the checklist", "dim")
         GameTooltip:Show()
     end)
 end

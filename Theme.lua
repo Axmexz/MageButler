@@ -1,6 +1,6 @@
 -- MageButler - Copyright (c) 2026 Padre Pidisc. All rights reserved. See LICENSE.txt.
 -- MageButler: visual styling shared by every frame.
--- Midnight navy panels, Arcane cyan highlights, restrained purple accents.
+-- Midnight navy panels and an accent colour of the player's choosing.
 
 local _, MB = ...
 local Theme = MB:NewModule("Theme")
@@ -259,6 +259,12 @@ function Theme:ShowTooltip(owner, title, ...)
         end
     end
     GameTooltip:Show()
+end
+
+--- One tooltip line in a colour from the palette ("text" when none is named).
+function Theme:TipLine(tooltip, text, colorName, wrap)
+    local r, g, b = self:Color(colorName or "text")
+    tooltip:AddLine(text, r, g, b, wrap)
 end
 
 function Theme:AttachTooltip(frame, title, body)

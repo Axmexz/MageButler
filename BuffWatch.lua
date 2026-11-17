@@ -662,7 +662,7 @@ function BuffWatch:GetCoverage()
     return Buffed(), state.total
 end
 
---- "ok", "low" (expiring), "none" (missing), or "off".
+--- "ok", "low" (expiring, or a weaker rank than could be given), "none" (missing), or "off".
 function BuffWatch:GetOverall()
     if not state.active then return "off" end
     return state.overall
@@ -705,7 +705,7 @@ function BuffWatch:AddTooltipLines(tooltip)
         local ar, ag, ab = Theme:Accent()
         tooltip:AddDoubleLine("Recommended spell", spell, 0.88, 0.92, 1, ar, ag, ab)
     elseif state.note then
-        tooltip:AddLine(state.note, 0.56, 0.63, 0.79, true)
+        Theme:TipLine(tooltip, state.note, "dim", true)
     end
 
     if db.tooltipNames and (state.missing > 0 or state.weak > 0 or state.expiring > 0) then
@@ -914,31 +914,31 @@ local function UnitTooltip(self)
     local r, g, b = StatusColor(record)
     GameTooltip:AddLine(API.Str(UnitName(self.unit)) or self.unit, r, g, b)
     if state.paused then
-        GameTooltip:AddLine("Buffs are not read right now.", 0.56, 0.63, 0.79)
+        Theme:TipLine(GameTooltip, "Buffs are not read right now.", "dim")
     elseif record == "excluded" then
-        GameTooltip:AddLine("Not counted (offline, dead, away or filtered).", 0.56, 0.63, 0.79, true)
+        Theme:TipLine(GameTooltip, "Not counted (offline, dead, away or filtered).", "dim", true)
     elseif record == "unknown" or record == nil then
-        GameTooltip:AddLine("Buffs could not be read.", 0.56, 0.63, 0.79)
+        Theme:TipLine(GameTooltip, "Buffs could not be read.", "dim")
     elseif record.status == "missing" then
-        GameTooltip:AddLine("Missing Intellect", 1, 0.35, 0.35)
+        Theme:TipLine(GameTooltip, "Missing Intellect", "bad")
     elseif record.status == "weak" then
         local has = RankNumber("intellect", record.aura)
         local can = record.cast and RankNumber("intellect", record.cast)
         if has and can then
-            GameTooltip:AddLine("Has Rank " .. has .. ", and you can give Rank " .. can, 1, 0.75, 0.25)
+            Theme:TipLine(GameTooltip, "Has Rank " .. has .. ", and you can give Rank " .. can, "warn")
         else
-            GameTooltip:AddLine("A weaker rank than you can give them", 1, 0.75, 0.25)
+            Theme:TipLine(GameTooltip, "A weaker rank than you can give them", "warn")
         end
     elseif record.status == "expiring" then
-        GameTooltip:AddLine("Expires in " .. math.ceil((record.remaining or 0) / 60) .. " min", 1, 0.75, 0.25)
+        Theme:TipLine(GameTooltip, "Expires in " .. math.ceil((record.remaining or 0) / 60) .. " min", "warn")
     elseif record.remaining then
-        GameTooltip:AddLine("Buffed, " .. math.ceil(record.remaining / 60) .. " min left", 0.35, 0.9, 0.55)
+        Theme:TipLine(GameTooltip, "Buffed, " .. math.ceil(record.remaining / 60) .. " min left", "ok")
     else
-        GameTooltip:AddLine("Buffed", 0.35, 0.9, 0.55)
+        Theme:TipLine(GameTooltip, "Buffed", "ok")
     end
     if type(record) == "table" then
         if not record.reachable then
-            GameTooltip:AddLine("Out of range", 0.56, 0.63, 0.79)
+            Theme:TipLine(GameTooltip, "Out of range", "dim")
         end
         -- Said rather than left unsaid: a buff whose rank cannot be told is
         -- taken as good enough, and that is why no upgrade is offered.
@@ -952,9 +952,9 @@ local function UnitTooltip(self)
                 0.56, 0.63, 0.79, true)
         end
     end
-    GameTooltip:AddLine("Left-click: Arcane Intellect", 0.56, 0.63, 0.79)
+    Theme:TipLine(GameTooltip, "Left-click: Arcane Intellect", "dim")
     if Spells:GetBest("brilliance") then
-        GameTooltip:AddLine("Right-click: Arcane Brilliance", 0.56, 0.63, 0.79)
+        Theme:TipLine(GameTooltip, "Right-click: Arcane Brilliance", "dim")
     end
     GameTooltip:Show()
 end
@@ -1101,7 +1101,7 @@ local function CreateIndicators()
         local r, g, b = Theme:Accent()
         GameTooltip:AddLine("Buff Watch", r, g, b)
         BuffWatch:AddTooltipLines(GameTooltip)
-        GameTooltip:AddLine("Click for the player list", 0.56, 0.63, 0.79)
+        Theme:TipLine(GameTooltip, "Click for the player list", "dim")
         GameTooltip:Show()
     end)
 

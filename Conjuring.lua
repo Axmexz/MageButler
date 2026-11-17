@@ -134,7 +134,8 @@ function Conjuring:Count(kind)
     return counts[kind] or 0
 end
 
---- Best conjured item of a kind currently in the bags, or nil.
+--- The strongest item of a kind in the bags: the mana gem the "use" click
+--- goes to, and the rank of water or food that is the one counted.
 function Conjuring:BestItem(kind)
     return bestItem[kind]
 end
@@ -215,11 +216,6 @@ function Conjuring:GetGemCast()
         end
     end
     return strongest, strongest ~= nil
-end
-
---- Strongest mana gem in the bags, for the "use" click.
-function Conjuring:GetGemItem()
-    return bestItem.gem
 end
 
 function Conjuring:Icon(kind)

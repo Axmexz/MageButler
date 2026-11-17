@@ -748,10 +748,17 @@ function BuffWatch:Diagnostics()
     for i = 1, #state.units do
         local record = state.units[i]
         local cast = record.cast
+        local carries
+        if record.status == "missing" then
+            carries = "nothing"
+        elseif record.aura then
+            carries = tostring(record.aura) .. " (strength " .. tostring(record.strength or "not known") .. ")"
+        else
+            carries = "a buff whose rank the client will not give"
+        end
         MB:Print("  " .. tostring(record.name) .. ": " .. tostring(record.status)
             .. ", level " .. tostring(record.level or "?")
-            .. ", carries " .. tostring(record.aura or "nothing")
-            .. " (strength " .. tostring(record.strength or "not known") .. ")"
+            .. ", carries " .. carries
             .. ", you would cast " .. tostring(cast or "?")
             .. " (strength " .. tostring((cast and STRENGTH[cast]) or "not known") .. ")")
     end

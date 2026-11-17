@@ -28,7 +28,7 @@ local FALLBACK_ICON = {
     trade = "Interface\\Icons\\INV_Misc_Bag_10",
 }
 local QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
-local ORB_ICON = "Interface\\Icons\\Spell_Holy_MagicalSentry"
+local ORB_ICON = MB.MEDIA .. "Icon.tga"   -- MageButler's own face, not a spell icon
 
 local ORB_SIZE = 46
 local ROW_WIDTH, ROW_HEIGHT = 150, 24
@@ -120,7 +120,9 @@ local function CreateOrb()
     orb.icon:SetTexture(ORB_ICON)
     orb.icon:SetPoint("TOPLEFT", 8, -8)
     orb.icon:SetPoint("BOTTOMRIGHT", -8, 8)
-    orb.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    -- Drawn whole: the crop above is for Blizzard's icons, which carry a
+    -- border, and would cut the edge off artwork of our own.
+    orb.icon:SetTexCoord(0, 1, 0, 1)
     if orb.CreateMaskTexture then
         local mask = orb:CreateMaskTexture()
         mask:SetTexture(MB.MEDIA .. "Circle.tga", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")

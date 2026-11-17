@@ -5,7 +5,7 @@
 ## Version: 1.1.3
 ## X-License: All Rights Reserved
 ## X-Copyright: Copyright (c) 2026 Padre Pidisc
-## IconTexture: Interface\Icons\Spell_Holy_MagicalSentry
+## IconTexture: Interface\AddOns\MageButler\Media\Icon.tga
 ## SavedVariables: MageButlerDB
 
 MageButler.lua

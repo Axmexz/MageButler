@@ -409,11 +409,14 @@ builders.general = function(page)
         Field("general", general, "lockPositions"))
     Checkbox(page, COLUMN, -52, "Repeat notifications in chat", "Also prints MageButler's on-screen notifications to the chat frame.",
         Field("general", general, "chatMessages"))
+    Checkbox(page, COLUMN, -76, "Clickable status dots on the orb",
+        "The two small dots on the orb's right edge: the upper one shows Buff Watch, the lower one the preparation check. Ticked, clicking the upper dot opens the Buff Watch player list and the lower dot the preparation checklist. Unticked, they only show their colour and a click on them counts as a click on the orb, so neither can be opened by accident.",
+        Field("appearance", function() return MB.db.appearance end, "pipClicks"))
 
     Slider(page, 0, -84, 200, "UI scale", "Scales the orb and the radial menu.", 0.6, 1.6, 0.05,
         function(value) return math.floor(value * 100 + 0.5) .. "%" end,
         Field("general", general, "uiScale"))
-    PanelButton(page, COLUMN, -94, "Reset positions", 130, "Moves the orb and MageButler's panels back to their default places.", function()
+    PanelButton(page, COLUMN, -102, "Reset positions", 130, "Moves the orb and MageButler's panels back to their default places.", function()
         MB.Config:ResetPositions()
         Changed("all")
     end)
@@ -844,9 +847,6 @@ builders.appearance = function(page)
     Checkbox(page, COLUMN, -116, "Status animations",
         "The status pips on the orb pulse while something needs attention, and the orb's halo and ripple move with them. Steady when all is well.",
         Field("appearance", appearance, "statusAnimations"))
-    Checkbox(page, 0, -140, "Status lights can be clicked",
-        "The two small lights on the orb's rim open the Buff Watch list and the preparation check when clicked. Unticked, a click on them goes to the orb instead, so they cannot be hit by accident.",
-        Field("appearance", appearance, "pipClicks"))
 end
 
 -------------------------------------------------------------------------------
@@ -1200,8 +1200,8 @@ local function CreateWelcome()
         Field("announce", announceDB, "atStart"))
 
     -- The two small lights on the orb's rim are easy to hit by accident.
-    checks.pipClicks = WelcomeCheck(choices, 0, -274, "The orb's two status lights can be clicked",
-        "They open the Buff Watch list and the preparation check. Unticked, a click on them goes to the orb instead, so they cannot be hit by accident.",
+    checks.pipClicks = WelcomeCheck(choices, 0, -274, "Clickable status dots on the orb",
+        "The two small dots on the orb's right edge: the upper one shows Buff Watch, the lower one the preparation check. Ticked, clicking them opens the Buff Watch player list and the preparation checklist. Unticked, they only show their colour and a click on them counts as a click on the orb, so neither can be opened by accident. Also under General in the settings.",
         Field("appearance", function() return MB.db.appearance end, "pipClicks"))
 
     welcome.checks = checks

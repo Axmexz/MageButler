@@ -1077,7 +1077,7 @@ local function CreateWelcome()
         accent .. "Left-click|r  the radial menu\n" ..
         accent .. "Right-click|r  cast the buff your group needs\n" ..
         accent .. "Shift + right-click|r  these settings\n" ..
-        accent .. "Right-click water or food|r  an older rank, for lower-level players\n" ..
+        accent .. "Right-click water or food|r  cycle to an older rank\n" ..
         accent .. "Shift as a trade opens|r  no water or food is given")
 
     local closing = Theme:Text(welcome, 11)
@@ -1087,7 +1087,7 @@ local function CreateWelcome()
     closing:SetWordWrap(true)
     closing:SetSpacing(3)
     closing:SetTextColor(Theme:Color("dim"))
-    closing:SetText("Out of the box it restocks your reagents at vendors, fills trades with food and water, and keeps an eye on your group's Intellect. Reagents stay untouched until you are high enough to use them.")
+    closing:SetText("Out of the box it restocks your reagents at vendors, fills trades with food and water, and keeps an eye on your group's Intellect. Older ranks are what lower-level players can eat and drink, and reagents stay untouched until you are high enough to use them.")
 
     ---------------------------------------------------------------------------
     -- The choices, under the greeting rather than behind a second page.
@@ -1102,6 +1102,11 @@ local function CreateWelcome()
     checks.prep = WelcomeCheck(choices, 0, 0, "Preparation check",
         "Answers whether you are stocked before a dungeon or raid.",
         Field("readiness", readinessDB, "enabled"))
+
+    -- Beside it, since both are about the orb's own small indicators.
+    checks.pipClicks = WelcomeCheck(choices, 200, 0, "Clickable status dots",
+        "The two small dots on the orb's right edge: the upper one shows Buff Watch, the lower one the preparation check. Ticked, clicking them opens the Buff Watch player list and the preparation checklist. Unticked, they only show their colour and a click on them counts as a click on the orb, so neither can be opened by accident. Also under General in the settings.",
+        Field("appearance", function() return MB.db.appearance end, "pipClicks"))
 
     local counts = Theme:Text(choices, 10)
     counts:SetPoint("TOPLEFT", 0, -28)
@@ -1189,23 +1194,26 @@ local function CreateWelcome()
         return button
     end
 
-    Heading(-192, "In dungeons and raids")
-    local inside = Theme:Text(choices, 11)
-    inside:SetPoint("TOPLEFT", 12, -208)
-    inside:SetJustifyH("LEFT")
-    inside:SetText("Said by itself as the portal opens, in")
-    welcome.channelInstance = ChannelButton(-204, "channelInstance", "inside a dungeon or raid")
+    -- One block per place: its heading with the channel beside it, and a
+    -- line underneath saying how the announcement is made there.
+    local function Where(y, heading, note, key, which)
+        Heading(y, heading)
+        local line = Theme:Text(choices, 11)
+        line:SetPoint("TOPLEFT", 12, y - 18)
+        line:SetJustifyH("LEFT")
+        line:SetTextColor(Theme:Color("dim"))
+        line:SetText(note)
+        return ChannelButton(y - 2, key, which)
+    end
 
-    Heading(-230, "Out in the world, where /say and /yell need your click")
-    welcome.channelWorld = ChannelButton(-244, "channelWorld", "out in the world")
-    checks.atStart = WelcomeCheck(choices, 12, -246, "Announce as I start casting",
+    welcome.channelInstance = Where(-192, "In dungeons and raids",
+        "Said by itself as the portal opens.", "channelInstance", "inside a dungeon or raid")
+    welcome.channelWorld = Where(-238, "Out in the world",
+        "/say and /yell need a click of your own.", "channelWorld", "out in the world")
+
+    checks.atStart = WelcomeCheck(choices, 12, -276, "Announce as I start casting",
         "Out in the world the game only lets an addon speak in /say or /yell at your own click. Ticked, it is said as you click the destination in MageButler's menu. Unticked, a button appears when the portal opens, for you to click.",
         Field("announce", announceDB, "atStart"))
-
-    -- The two small lights on the orb's rim are easy to hit by accident.
-    checks.pipClicks = WelcomeCheck(choices, 0, -274, "Clickable status dots on the orb",
-        "The two small dots on the orb's right edge: the upper one shows Buff Watch, the lower one the preparation check. Ticked, clicking them opens the Buff Watch player list and the preparation checklist. Unticked, they only show their colour and a click on them counts as a click on the orb, so neither can be opened by accident. Also under General in the settings.",
-        Field("appearance", function() return MB.db.appearance end, "pipClicks"))
 
     welcome.checks = checks
 

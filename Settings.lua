@@ -5,7 +5,9 @@ local _, MB = ...
 local Settings = MB:NewModule("Settings")
 local Theme
 
-local WIDTH, HEIGHT = 640, 528
+-- The Announcements page is the tallest and sets the height: with a preview
+-- under each of its three messages it needs every pixel of this.
+local WIDTH, HEIGHT = 640, 576
 local SIDEBAR = 152
 local TITLE = 38
 local COLUMN = 215 -- horizontal distance between option columns
@@ -776,10 +778,12 @@ builders.announce = function(page)
     end
 
     --- The line showing what would actually be said. It follows the typing.
-    local function Preview(y, kind)
+    --- `lines` is how many it is given room for; a message long enough to
+    --- wrap needs two.
+    local function Preview(y, kind, lines)
         Label(page, 0, y, "Preview", 10, "dim")
         local text = Label(page, 0, y - 15, "", 11)
-        text:SetSize(PAGE_WIDTH, 32)
+        text:SetSize(PAGE_WIDTH, (lines or 2) * 16)
         text:SetJustifyV("TOP")
         text:SetWordWrap(true)
         text:SetSpacing(2)
@@ -820,20 +824,21 @@ builders.announce = function(page)
     Checkbox(page, 0, -238, "Announce as I start casting",
         "Ticked, it is said as you click the destination in MageButler's menu, before the cast has finished, in the words below. Nothing is said if the spell is on cooldown or you are moving. Unticked, a button appears when the portal opens and your click on it sends the message above. A portal cast any other way always gets the button.",
         Field("announce", announce, "atStart"))
+    local showStart = Preview(-288, "start", 1)
     TextBox(page, 0, -262, PAGE_WIDTH, "Message as the cast starts",
         "What is said at that click, for a portal. The same placeholders work here.",
-        200, nil, Message("startText"))
+        200, showStart, Message("startText"))
 
-    Header(page, -292, "Your Own Teleports")
-    Checkbox(page, 0, -318, "Announce my own teleports too",
+    Header(page, -326, "Your Own Teleports")
+    Checkbox(page, 0, -352, "Announce my own teleports too",
         "Also says so when you teleport yourself, in the words below, wherever you are. Off, only portals are announced.",
         Field("announce", announce, "teleports"))
-    local showTeleport = Preview(-370, "teleport")
-    TextBox(page, 0, -344, PAGE_WIDTH, "Teleport message",
+    local showTeleport = Preview(-404, "teleport")
+    TextBox(page, 0, -378, PAGE_WIDTH, "Teleport message",
         "What is said when you teleport yourself, if that is switched on. The same placeholders work here.",
         200, showTeleport, Message("teleportText"))
 
-    Note(page, -424, "{portal} is the destination, {player} is you, {spell} the spell's full name. A message is cut at 255 characters.")
+    Note(page, -458, "{portal} is the destination, {player} is you, {spell} the spell's full name. A message is cut at 255 characters.")
 end
 
 builders.appearance = function(page)

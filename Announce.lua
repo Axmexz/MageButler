@@ -97,16 +97,20 @@ end
 local function Template(kind, typed)
     if typed then return typed end
     local db = MB.db.announce
-    return (kind == "teleport") and db.teleportText or db.text
+    if kind == "teleport" then return db.teleportText end
+    if kind == "start" then return db.startText end
+    return db.text
 end
 
 --- What would be said, for the settings to show: the first destination the
---- player has learned, or Stormwind when there is none yet.
+--- player has learned, or Stormwind when there is none yet. "portal" and
+--- "start" are both cast at a portal; "teleport" is the player's own.
 function Announce:Preview(kind, typed)
-    local list = (kind == "teleport") and Spells:GetTeleports() or Spells:GetPortals()
+    local teleport = kind == "teleport"
+    local list = teleport and Spells:GetTeleports() or Spells:GetPortals()
     local spell = list[1]
     local place = spell and spell.short or "Stormwind"
-    local name = spell and spell.name or ((kind == "teleport") and "Teleport: Stormwind" or "Portal: Stormwind")
+    local name = spell and spell.name or (teleport and "Teleport: Stormwind" or "Portal: Stormwind")
     return self:Format(Template(kind, typed), place, name)
 end
 

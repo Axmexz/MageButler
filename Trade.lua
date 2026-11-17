@@ -27,6 +27,16 @@ local KINDS = { "water", "food" }
 local tradeOpen = false
 local autoBlocked = false
 local job
+local acting = false   -- inside one of the job's own protected calls
+
+--- Makes one of the calls the client may refuse. A refusal is reported while
+--- the call is still running, so this is how a refused trade is told apart
+--- from some other blocked action that merely happens during a fill.
+local function Act(fn, ...)
+    acting = true
+    fn(...)
+    acting = false
+end
 
 -------------------------------------------------------------------------------
 -- Trade window state
@@ -345,22 +355,22 @@ Step = function()
                 if not emptyBag then
                     return Verify("no free bag slot to split a stack.")
                 end
-                C_Container.SplitContainerItem(bag, slot, amount)
+                Act(C_Container.SplitContainerItem, bag, slot, amount)
                 local cursorKind, cursorID = CursorItem()
                 if cursorKind ~= "item" or cursorID ~= itemID then
                     if cursorKind then ClearCursor() end
                     return Verify("could not split a stack.")
                 end
-                C_Container.PickupContainerItem(emptyBag, emptySlot)
+                Act(C_Container.PickupContainerItem, emptyBag, emptySlot)
                 if CursorItem() then ClearCursor() end
                 -- The new stack exists once the server answers; until then it is locked.
                 return Continue(0.3)
             end
 
             if partial then
-                C_Container.SplitContainerItem(bag, slot, amount)
+                Act(C_Container.SplitContainerItem, bag, slot, amount)
             else
-                C_Container.PickupContainerItem(bag, slot)
+                Act(C_Container.PickupContainerItem, bag, slot)
             end
 
             -- Only ever hand over exactly the item that was meant to be picked up.
@@ -374,7 +384,7 @@ Step = function()
                 return Continue(0.15)
             end
 
-            ClickTradeButton(tradeSlot)
+            Act(ClickTradeButton, tradeSlot)
 
             if CursorItem() then
                 -- The trade slot refused the stack; put it back where it came from.
@@ -545,7 +555,7 @@ function Trade:OnEnable()
     end)
 
     local function OnBlocked(_, addon)
-        if addon ~= ADDON_NAME or not job then return end
+        if not acting or MB.IsSecret(addon) or addon ~= ADDON_NAME or not job then return end
         local manual = job.manual
         job = nil
         if CursorItem() then ClearCursor() end

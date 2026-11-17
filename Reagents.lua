@@ -342,6 +342,9 @@ local function TryRestock()
         MB:AfterInventory(TryRestock)
         return
     end
+    -- That refresh can itself have run a restock that was waiting on the
+    -- bags: checked again, so one visit never buys everything twice.
+    if visitDone or not merchantOpen then return end
     visitDone = true
 
     local plan, notes = BuildPlan()

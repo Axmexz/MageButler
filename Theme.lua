@@ -340,6 +340,13 @@ local function Start(group)
         group:Play()
         return
     end
+    -- Started in the same moment as the beat itself: it is on the beat
+    -- already, and waiting for the next would hold it back a whole one.
+    if epoch and (GetTime() - epoch) % BEAT < 0.05 then
+        running[group] = true
+        group:Play()
+        return
+    end
     running[group] = true
     tokens = tokens + 1
     local token = tokens
@@ -445,14 +452,17 @@ function Theme:SetBreath(region, mode, hide)
     end
     local group = region.mbBreath
     if not mode then
-        local function Rest()
-            if hide then FadeAway(region) else region:SetAlpha(0.7) end
-        end
-        if group and region.mbBreathMode then
+        if group and (region.mbBreathMode or ending[group]) then
+            -- Still breathing, or playing out its beat: the latest request
+            -- decides what happens when the beat ends.
             region.mbBreathMode = nil
-            Halt(group, Rest)
-        elseif not (group and ending[group]) then
-            if hide then region:Hide() else region:SetAlpha(0.7) end
+            Halt(group, function()
+                if hide then FadeAway(region) else region:SetAlpha(0.7) end
+            end)
+        elseif not hide then
+            region:SetAlpha(0.7)
+        elseif not (region.mbFade and region.mbFade:IsPlaying()) then
+            region:Hide()   -- unless it is fading away already, which ends hidden
         end
         return
     end
@@ -474,8 +484,8 @@ function Theme:SetBreath(region, mode, hide)
         group.scale:SetDuration(BEAT / 2)
         region.mbBreath = group
     end
-    region:SetAlpha(0.35)   -- where the breath starts, so nothing jumps as it begins
     if not region.mbBreathMode then
+        region:SetAlpha(0.35)   -- where the breath starts, so nothing jumps as it begins
         region.mbBreathMode = true
         Start(group)
     end
@@ -527,9 +537,9 @@ function Theme:SetWave(region, mode)
     -- Invisible in its own right, so that it is only ever seen through the
     -- animation: between one loop and the next a texture shows at its own
     -- opacity for an instant.
-    region:SetAlpha(0)
-    region:Show()
     if not region.mbWaveMode then
+        region:SetAlpha(0)
+        region:Show()
         region.mbWaveMode = true
         Start(group)
     end

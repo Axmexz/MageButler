@@ -79,6 +79,18 @@ local CAST_WAIT = 0.7     -- how long the game gets to start it
 local pip, counter, list, listPanel
 local unitButtons = {}
 
+--- Ends a drag of the player list and keeps where it was put. The list holds
+--- secure buttons, so it has to be let go before combat lockdown begins.
+local function StopListDrag()
+    if not (listPanel and listPanel.dragging) then return end
+    listPanel.dragging = nil
+    list:StopMovingOrSizing()
+    local x, y = MB.CentreOffset(list)
+    if x then
+        MB.db.buffwatch.x, MB.db.buffwatch.y = x, y
+    end
+end
+
 -------------------------------------------------------------------------------
 -- Reading the game
 -------------------------------------------------------------------------------
@@ -317,7 +329,11 @@ local function Evaluate()
                         status = "missing"
                     elseif db.upgradeWeaker and strength and castStrength and strength < castStrength then
                         status = "weak"
-                    elseif rebuff and remaining and remaining < rebuff then
+                    elseif rebuff and remaining and remaining < rebuff
+                        and not (strength and castStrength and strength > castStrength) then
+                        -- A stronger rank than the Mage can give cannot be
+                        -- refreshed: the game refuses the weaker cast until
+                        -- it has run out, so it is left alone until then.
                         status = "expiring"
                     end
 
@@ -400,6 +416,18 @@ local function Needs()
     return needs
 end
 
+--- Whether Arcane Brilliance would do anything for a player who needs a buff:
+--- they have to be of a level to receive it, and one who already carries a
+--- weaker Intellect has to be given something stronger than that.
+local function Gains(record, brilliance)
+    if not CanReceive(brilliance, record.level) then return false end
+    local strength = STRENGTH[brilliance]
+    if record.status == "weak" and record.strength and strength and strength <= record.strength then
+        return false
+    end
+    return true
+end
+
 --- Picks the one spell a right-click should cast, or explains why none.
 local function Recommend()
     state.action, state.note = nil, nil
@@ -424,7 +452,11 @@ local function Recommend()
     if brilliance and context ~= "solo" then
         local benefit, target, worthIt = 0, nil, false
         if context == "party" or BuffWatch:GetScope() == "raid" then
-            benefit = #needs
+            -- Only the players it would actually reach are counted. The rest
+            -- are served one at a time below, at the rank they can take.
+            for i = 1, #needs do
+                if Gains(needs[i], brilliance) then benefit = benefit + 1 end
+            end
             target = "player"
             worthIt = benefit >= (context == "raid" and db.raidThreshold or db.partyThreshold)
         else
@@ -434,7 +466,9 @@ local function Recommend()
             local count, reach = {}, {}
             for i = 1, #needs do
                 local record = needs[i]
-                count[record.subgroup] = (count[record.subgroup] or 0) + 1
+                if Gains(record, brilliance) then
+                    count[record.subgroup] = (count[record.subgroup] or 0) + 1
+                end
                 if record.reachable and not reach[record.subgroup]
                     and CanReceive(brilliance, record.level) then
                     reach[record.subgroup] = record.unit
@@ -449,7 +483,8 @@ local function Recommend()
         end
 
         if worthIt and target then
-            if Reagents:Count("powder") > 0 then
+            -- A count that has not been read yet is unknown, not zero.
+            if not MB.inventoryKnown or Reagents:Count("powder") > 0 then
                 state.action = {
                     kind = "brilliance", spell = brilliance, unit = target,
                     benefit = benefit, waiting = #needs,
@@ -681,10 +716,15 @@ end
 -------------------------------------------------------------------------------
 -- Updating: driven by events, never by polling
 -------------------------------------------------------------------------------
+local expiryDue   -- when the pending expiry check will run
+
 local function ScheduleExpiryCheck()
-    timerToken = timerToken + 1
     local db = MB.db.buffwatch
-    if not (state.active and db.watchExpiry) then return end
+    if not (state.active and db.watchExpiry) then
+        timerToken = timerToken + 1
+        expiryDue = nil
+        return
+    end
 
     -- The next moment a buff either crosses the rebuff threshold or runs out.
     local rebuff = db.rebuffMinutes * 60
@@ -696,11 +736,23 @@ local function ScheduleExpiryCheck()
             if wait > 0 and (not soonest or wait < soonest) then soonest = wait end
         end
     end
-    if not soonest then return end
+    if not soonest then
+        timerToken = timerToken + 1
+        expiryDue = nil
+        return
+    end
 
+    -- An update that comes to the same moment keeps the timer already
+    -- waiting for it, instead of leaving another behind every time.
+    local due = GetTime() + soonest + 1
+    if expiryDue and math.abs(expiryDue - due) < 0.5 then return end
+    expiryDue = due
+    timerToken = timerToken + 1
     local token = timerToken
     C_Timer.After(soonest + 1, function()
-        if token == timerToken then BuffWatch:Queue() end
+        if token ~= timerToken then return end
+        expiryDue = nil
+        BuffWatch:Queue()
     end)
 end
 
@@ -955,15 +1007,7 @@ local function CreateList()
         listPanel.dragging = true
         list:StartMoving()
     end)
-    listPanel:SetScript("OnDragStop", function()
-        if not listPanel.dragging then return end
-        listPanel.dragging = nil
-        list:StopMovingOrSizing()
-        local x, y = MB.CentreOffset(list)
-        if x then
-            MB.db.buffwatch.x, MB.db.buffwatch.y = x, y
-        end
-    end)
+    listPanel:SetScript("OnDragStop", StopListDrag)
 
     listPanel.title = Theme:Text(listPanel, 12)
     listPanel.title:SetPoint("TOPLEFT", 12, -9)
@@ -1091,6 +1135,7 @@ function BuffWatch:OnEnable()
 
     -- Entering combat: switch the orb's buff click off while that is still allowed.
     MB:RegisterEvent("PLAYER_REGEN_DISABLED", function()
+        StopListDrag()   -- a drag still under way: drop the list while that is permitted
         local orb = MB.RadialMenu.orb
         orb:SetAttribute("type2", nil)
         orb:SetAttribute("spell2", nil)

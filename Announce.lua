@@ -260,15 +260,19 @@ local function OnCast(_, _, castID, spellID)
     if not entry then return end
     if entry.kind == "teleport" and not db.teleports then return end
 
-    -- Already said, at the click that started this cast.
-    if startedSpell == spellID and GetTime() - startedTime < START_GUARD then
+    castID = API.Str(castID)
+    local now = GetTime()
+
+    -- Already said, at the click that started this cast. Destinations are
+    -- compared, not IDs, since the cast may report another ID for the same
+    -- spell; and the cast is noted, so a second report of it stays quiet too.
+    if startedSpell and travel[startedSpell] == entry and now - startedTime < START_GUARD then
         startedSpell = nil
+        lastCast, lastSpell, lastTime = castID, spellID, now
         return
     end
 
     -- Once per cast, however often the client reports it.
-    castID = API.Str(castID)
-    local now = GetTime()
     if (castID and castID == lastCast) or (spellID == lastSpell and now - lastTime < REPEAT_GUARD) then
         return
     end

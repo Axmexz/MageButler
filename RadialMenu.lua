@@ -167,7 +167,10 @@ local function CreateOrb()
     end)
     -- Both click phases arrive here; the press prepares, the release acts.
     orb:SetScript("PreClick", function(_, button, down)
-        if button == "RightButton" and down and not IsShiftKeyDown() and not IsControlKeyDown() then
+        -- The buff click is a plain right-click on purpose: held with Shift,
+        -- Ctrl or Alt the secure button casts nothing, so nothing is expected.
+        if button == "RightButton" and down and not IsShiftKeyDown() and not IsControlKeyDown()
+            and not IsAltKeyDown() then
             MB.BuffWatch:PrepareClick()
         end
     end)
@@ -177,7 +180,7 @@ local function CreateOrb()
         if button == "RightButton" then
             if IsShiftKeyDown() then
                 MB.Settings:Toggle()
-            elseif not IsControlKeyDown() then
+            elseif not IsControlKeyDown() and not IsAltKeyDown() then
                 MB.BuffWatch:AfterClick()
             end
         elseif button == "MiddleButton" then
@@ -356,12 +359,16 @@ local function CreateRow(sub, index)
     row:HookScript("OnLeave", function()
         GameTooltip:Hide()
     end)
+    -- The release is the click that casts, and this runs just before it does:
+    -- inside the player's own click, which is the one moment an announcement
+    -- in /say or /yell may be made out in the world, and early enough that
+    -- "can this cast start?" is not answered by the cast itself having begun.
+    row:SetScript("PreClick", function(self, _, down)
+        if not down and self.spellID then MB.Announce:OnTravelClick(self.spellID) end
+    end)
     row:SetScript("PostClick", function(self, _, down)
         -- The cast happens on release.
         if down then return end
-        -- Still inside the player's own click, which is the one moment an
-        -- announcement in /say or /yell may be made out in the world.
-        if self.spellID then MB.Announce:OnTravelClick(self.spellID) end
         -- Close the menu after it when allowed.
         if not MB.db.radial.closeAfterTravel or InCombatLockdown() then return end
         menu:Hide()

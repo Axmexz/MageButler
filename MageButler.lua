@@ -49,6 +49,15 @@ local function Dispatch(list, ...)
     end
 end
 
+--- One call kept apart from whatever comes after it, in the same way.
+local function Call(fn, ...)
+    if securecall then
+        securecall(fn, ...)
+    else
+        fn(...)
+    end
+end
+
 --- Registers a callback for a game event. Returns false when the client does
 --- not know the event, so optional events can be requested safely.
 function MB:RegisterEvent(event, fn)
@@ -185,9 +194,7 @@ MB:RegisterEvent("PLAYER_REGEN_ENABLED", function()
     -- rest of what was waiting for combat to end.
     for i = 1, #order do
         local fn = queue[order[i]]
-        if fn then
-            if securecall then securecall(fn) else fn() end
-        end
+        if fn then Call(fn) end
     end
 end)
 
@@ -541,8 +548,10 @@ end
 local function Announce(redraw)
     for i = 1, #MB.modules do
         local module = MB.modules[i]
+        -- Each on its own: the counts are already kept, so a module that
+        -- failed here would otherwise cost the others this update for good.
         if module.RefreshInventory then
-            module:RefreshInventory()
+            Call(module.RefreshInventory, module)
         end
     end
     if redraw then
@@ -577,7 +586,7 @@ local function Open(why)
     local waiters = inventoryWaiters
     inventoryWaiters = {}
     for i = 1, #waiters do
-        waiters[i]()
+        Call(waiters[i])
     end
 end
 

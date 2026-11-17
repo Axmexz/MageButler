@@ -258,16 +258,8 @@ end
 local function Cycle(page, x, y, width, title, tooltip, options, get, set)
     local button = Theme:CreateButton(page, "", width, 20)
     button:SetPoint("TOPLEFT", x, y)
-    button:SetScript("OnClick", function()
-        local current = get()
-        local index = 1
-        for i = 1, #options do
-            if options[i][1] == current then index = i % #options + 1 end
-        end
-        set(options[index][1])
-    end)
-    Theme:AttachTooltip(button, title, tooltip)
-    refreshers[#refreshers + 1] = function()
+    --- Writes the current choice on the button.
+    local function Show()
         local current = get()
         local text = options[1][2]
         for i = 1, #options do
@@ -275,6 +267,18 @@ local function Cycle(page, x, y, width, title, tooltip, options, get, set)
         end
         button.label:SetText(text)
     end
+    button:SetScript("OnClick", function()
+        local current = get()
+        local index = 1
+        for i = 1, #options do
+            if options[i][1] == current then index = i % #options + 1 end
+        end
+        set(options[index][1])
+        Show()   -- at once: the page's refreshers only run while the panel is open
+    end)
+    Theme:AttachTooltip(button, title, tooltip)
+    refreshers[#refreshers + 1] = Show
+    button.Refresh = Show
     return button
 end
 
@@ -668,12 +672,19 @@ builders.trading = function(page)
     -- One table of plain numbers per class; the selector picks whose table
     -- is shown: party members, raid members or everyone else.
     local selected = "party"
+    local boxes = {}
     Label(page, 0, -90, "Amounts for", 12, nil, 86)
     Cycle(page, 92, -86, 130, "Amounts for",
         "Which set of numbers the table below shows and edits. Each kind of trade partner has its own.",
         { { "party", "Party members" }, { "raid", "Raid members" }, { "other", "Other players" } },
         function() return selected end,
         function(value)
+            -- A number still being typed belongs to the table it was typed
+            -- under: it is taken now, before the selection moves on.
+            for i = 1, #boxes do
+                local box = boxes[i]
+                if box and box.HasFocus and box:HasFocus() then box:ClearFocus() end
+            end
             selected = value
             Changed("trade") -- redraws the table for the new selection
         end)
@@ -703,10 +714,10 @@ builders.trading = function(page)
         if colour and colour.r then
             label:SetTextColor(colour.r, colour.g, colour.b)
         end
-        NumberBox(page, x + 96, y, 44, name .. ": water",
+        boxes[#boxes + 1] = NumberBox(page, x + 96, y, 44, name .. ": water",
             "Items of conjured water to offer a " .. name .. " (20 is one full stack). 0 offers none.", 0, 120,
             Field("trade", row, "water"))
-        NumberBox(page, x + 146, y, 44, name .. ": food",
+        boxes[#boxes + 1] = NumberBox(page, x + 146, y, 44, name .. ": food",
             "Items of conjured food to offer a " .. name .. " (20 is one full stack). 0 offers none.", 0, 120,
             Field("trade", row, "food"))
     end
@@ -823,7 +834,7 @@ builders.appearance = function(page)
     Checkbox(page, 0, -116, "Orb glow", "A soft halo behind the orb while something needs your attention: players to buff, or supplies running short. Dark when all is well.",
         Field("appearance", appearance, "glow"))
     Checkbox(page, COLUMN, -116, "Status animations",
-        "The status pips on the orb pulse while something needs attention: slowly for a warning, faster when something is missing. Steady when all is well.",
+        "The status pips on the orb pulse while something needs attention, and the orb's halo and ripple move with them. Steady when all is well.",
         Field("appearance", appearance, "statusAnimations"))
 end
 

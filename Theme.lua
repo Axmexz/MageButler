@@ -109,6 +109,23 @@ function Theme:Text(parent, size, layer, flags)
     return text
 end
 
+-- The game's own fantasy serif. There is no italic face on this client, so
+-- this is what sets a line apart from the plain text around it.
+local FANCY_FONT = "Fonts\\MORPHEUS.ttf"
+
+--- Draws a font string in that serif. Morpheus runs small for its size, so
+--- it is given a couple of points over the text it sits with. A client that
+--- does not have the face keeps the font it had.
+function Theme:Fancy(text, size)
+    local font, height, flags = text:GetFont()
+    size = size or (height and height + 2) or 13
+    text:SetFont(FANCY_FONT, size, flags or "")
+    if not text:GetFont() and font then
+        text:SetFont(font, height or size, flags or "")
+    end
+    return text
+end
+
 --- Applies the panel backdrop. colorName: "bg", "panel" or "raised".
 function Theme:SkinPanel(frame, colorName, solid)
     frame:SetBackdrop({

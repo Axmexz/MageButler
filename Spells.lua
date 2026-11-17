@@ -45,7 +45,6 @@ local PORTALS = {
 local RANKS = {
     water = { 5504, 5505, 5506, 6127, 10138, 10139, 10140, 27090, 37420 },
     food = { 587, 597, 990, 6129, 10144, 10145, 28612, 33717 },
-    ritual = { 43987 },
     intellect = { 1459, 1460, 1461, 10156, 10157, 27126 },
     brilliance = { 23028, 27127 },
 }
@@ -67,7 +66,7 @@ local best = {}
 local knownRanks = {}   -- [key] = every rank of it the player knows, weakest first
 local gemSpells = {}    -- [index into Spells.GEMS] = the learned spell, or false
 local signature = ""
-local SIGNATURE_KEYS = { "water", "food", "ritual", "intellect", "brilliance" }
+local SIGNATURE_KEYS = { "water", "food", "intellect", "brilliance" }
 
 -------------------------------------------------------------------------------
 -- Spellbook scan
@@ -269,7 +268,7 @@ end
 function Spells:GetTeleports() return teleports end
 function Spells:GetPortals() return portals end
 
---- Highest learned rank of "water", "food", "ritual", "intellect" or "brilliance".
+--- Highest learned rank of "water", "food", "intellect" or "brilliance".
 function Spells:GetBest(key) return best[key] end
 
 local NO_RANKS = {}
@@ -300,7 +299,7 @@ end
 function Spells:UsesReagent(key)
     if key == "runeT" then return #teleports > 0 end
     if key == "runeP" then return #portals > 0 end
-    if key == "powder" then return best.brilliance ~= nil or best.ritual ~= nil end
+    if key == "powder" then return best.brilliance ~= nil end
     return false
 end
 

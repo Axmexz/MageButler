@@ -535,9 +535,6 @@ ButtonTooltip = function(button)
         if ranks and ranks > 1 then
             AddHint("Right-click: step down a rank, for players too low for this one")
         end
-        if key == "food" and Spells:GetBest("ritual") then
-            AddHint("Shift+right-click: Ritual of Refreshment")
-        end
     elseif key == "gem" then
         local spellID, allHeld = Conjuring:GetGemCast()
         if spellID then
@@ -662,9 +659,6 @@ function Radial:RefreshVisuals()
     SetCount(trade, nil)
 end
 
--- Every modifier combination that includes Shift, as the client spells them.
-local SHIFT_PREFIXES = { "shift-", "ctrl-shift-", "alt-shift-", "alt-ctrl-shift-" }
-
 --- Secure attributes for the conjure buttons. Out of combat only.
 --- The "*" prefix makes each one apply whatever modifier keys are held; a
 --- plain "type1" would be skipped by a keybind such as ALT-W, because the
@@ -677,18 +671,10 @@ local function RefreshAttributes()
 
     local food = buttons.food
     local foodSpell = Conjuring:GetSpell("food")
-    local ritual = Spells:GetBest("ritual")
     food:SetAttribute("*type1", foodSpell and "spell" or nil)
     food:SetAttribute("*spell1", foodSpell)
-    -- A plain right-click steps down a rank, which casts nothing, so Ritual
-    -- of Refreshment is the one with Shift held. The "*" wildcard cannot be
-    -- used here, since it would catch the unmodified right-click too, so
-    -- every prefix holding Shift is named: the client builds them in the
-    -- order shift, ctrl, alt and looks for that exact string.
-    for _, prefix in ipairs(SHIFT_PREFIXES) do
-        food:SetAttribute(prefix .. "type2", ritual and "spell" or nil)
-        food:SetAttribute(prefix .. "spell2", ritual)
-    end
+    -- Nothing is cast by a right-click on the food button: a plain one steps
+    -- the rank down, and that is done in a PostClick hook, not here.
     food:SetAttribute("*type2", nil)
     food:SetAttribute("*spell2", nil)
 
@@ -945,8 +931,9 @@ function Radial:OnEnable()
     end
 
     -- A plain right-click on water or food steps down a rank. It casts
-    -- nothing, so it is done here and not by a secure attribute; with Shift
-    -- held the food button casts Ritual of Refreshment instead.
+    -- nothing, so it is done here and not by a secure attribute. Shift is
+    -- left free on purpose: a right-click with it held does nothing at all,
+    -- rather than stepping a rank the player did not mean to step.
     for _, key in ipairs(CONJURED) do
         buttons[key]:HookScript("PostClick", function(_, click, down)
             if down or click ~= "RightButton" or IsShiftKeyDown() then return end

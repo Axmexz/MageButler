@@ -480,37 +480,39 @@ ButtonTooltip = function(button)
         end
         local target = Conjuring:Target(key)
         local have = Conjuring:Count(key)
+        -- The count is of the strongest rank carried and of that alone, so it
+        -- says which rank that is: a bare number next to a button set to
+        -- conjure another rank reads as a contradiction.
+        local counted = Conjuring:BestItem(key)
+        local countedRank = counted and Conjuring:RankOfItem(counted)
         GameTooltip:AddLine(" ")
         if not MB.inventoryKnown then
             Theme:TipLine(GameTooltip, "In bags: not counted yet", "dim")
-        elseif target > 0 then
-            Theme:TipLine(GameTooltip, "In bags: " .. have .. " / " .. target, "text")
         else
-            Theme:TipLine(GameTooltip, "In bags: " .. have, "text")
-        end
-        -- Which rank is set to be conjured, and from what level it can be
-        -- eaten or drunk: that is what decides who in the group can use it.
-        local _, rank, ranks, item, level = Conjuring:RankInfo(key)
-        if rank and level then
-            local line = "Conjures Rank " .. rank .. ", usable from level " .. level
-            if item and MB.inventoryKnown then
-                line = line .. "  (" .. MB:CountOf(item) .. " carried)"
-            end
-            Theme:TipLine(GameTooltip, line, Conjuring:SteppedDown(key) and "gold" or "text", true)
-        end
+            local line = "In bags"
+            if countedRank then line = line .. "  Rank " .. countedRank end
+            line = line .. ": " .. have
+            if target > 0 then line = line .. " / " .. target end
+            Theme:TipLine(GameTooltip, line, "text")
 
-        -- Lower ranks are kept for lower-level players, and the count above
-        -- is of the strongest alone, so what else is carried is said here.
-        if MB.inventoryKnown then
+            -- Lower ranks, kept for players too low for the strongest.
             local carried = Conjuring:RanksCarried(key)
             for i = #carried, 1, -1 do
                 local entry = carried[i]
-                if entry.item ~= item then
+                if entry.item ~= counted then
                     local name = entry.rank and ("Rank " .. entry.rank) or (API.ItemName(entry.item) or "Other")
                     Theme:TipLine(GameTooltip, "  " .. name .. ": " .. entry.count
                         .. "  (level " .. entry.level .. ")", "dim")
                 end
             end
+        end
+        -- What the button will make, which is not always what is carried, and
+        -- from what level it can be eaten or drunk: that decides who in the
+        -- group it is any use to.
+        local _, rank, ranks, _, level = Conjuring:RankInfo(key)
+        if rank and level then
+            Theme:TipLine(GameTooltip, "Conjures Rank " .. rank .. ", usable from level " .. level,
+                Conjuring:SteppedDown(key) and "gold" or "text", true)
         end
 
         if ranks and ranks > 1 then

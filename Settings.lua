@@ -1254,8 +1254,57 @@ function Settings:MaybeWelcome()
     end)
 end
 
+-------------------------------------------------------------------------------
+-- A shortcut in the game's own Options -> AddOns list
+-------------------------------------------------------------------------------
+--- Nothing of MageButler's is drawn in Blizzard's options window: every
+--- setting lives in MageButler's own, so opening the entry there closes that
+--- window and opens this one. The page keeps a button as well, for the case
+--- where the game will not let its window be closed from here, in combat
+--- above all.
+local function RegisterGameOptions()
+    local panel = CreateFrame("Frame")
+    panel.name = "MageButler"
+
+    local text = Theme:Text(panel, 13)
+    text:SetPoint("TOPLEFT", 16, -16)
+    text:SetWidth(420)
+    text:SetJustifyH("LEFT")
+    text:SetWordWrap(true)
+    text:SetText("MageButler keeps its settings in a window of its own, which opens as you come here. "
+        .. "Type /mb to open it at any time.")
+
+    local button = Theme:CreateButton(panel, "Open MageButler", 160, 24)
+    button:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)
+    button:SetScript("OnClick", function()
+        Settings:Open()
+    end)
+
+    panel:SetScript("OnShow", function()
+        -- A frame later: the options window is still laying itself out, and
+        -- closing a window in the middle of its own show is asking for it.
+        C_Timer.After(0, function()
+            local options = _G.SettingsPanel
+            if options and options:IsShown() and not InCombatLockdown() then
+                if _G.HideUIPanel then _G.HideUIPanel(options) else options:Hide() end
+            end
+            Settings:Open()
+        end)
+    end)
+
+    local api = _G.Settings   -- the game's own, not this module
+    if api and api.RegisterCanvasLayoutCategory and api.RegisterAddOnCategory then
+        local category = api.RegisterCanvasLayoutCategory(panel, "MageButler")
+        category.ID = "MageButler"
+        api.RegisterAddOnCategory(category)
+    elseif _G.InterfaceOptions_AddCategory then
+        _G.InterfaceOptions_AddCategory(panel)
+    end
+end
+
 function Settings:OnEnable()
     Theme = MB.Theme
     MB:On("SETTINGS_CHANGED", Refresh)
     MB:On("SPELLS_UPDATED", Refresh)
+    RegisterGameOptions()
 end

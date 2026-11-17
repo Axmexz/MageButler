@@ -998,6 +998,16 @@ local welcome
 local welcomeChecks = {}
 local WELCOME_HEIGHT = 584
 
+-- The greeting's own grid, so everything in it stands on the same few edges:
+-- two columns, an indent for whatever sits under a heading, and one right
+-- edge that the number boxes and the channel buttons all end on.
+local INDENT = 12               -- items under a heading
+local COLUMN_TWO = 180          -- where the right-hand column's items begin
+local BOX = 40                  -- width of a number box
+local CHANNEL = 130             -- width of a channel button
+local RIGHT_EDGE = 382          -- where the right-hand column ends
+local COLUMN_ONE_EDGE = COLUMN_TWO - 16   -- and where the left-hand one does
+
 local function readinessDB() return MB.db.readiness end
 local function prepDB() return MB.db.readiness.items end
 
@@ -1068,7 +1078,7 @@ local function CreateWelcome()
     intro:SetText("Your orb is on screen now, a little to the right of the middle. Drag it wherever suits you.")
 
     local clicks = Theme:Text(welcome, 12)
-    clicks:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 6, -12)
+    clicks:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -12)
     clicks:SetWidth(378)
     clicks:SetJustifyH("LEFT")
     clicks:SetSpacing(5)
@@ -1081,7 +1091,7 @@ local function CreateWelcome()
         accent .. "Shift as a trade opens|r  no water or food is given")
 
     local closing = Theme:Text(welcome, 11)
-    closing:SetPoint("TOPLEFT", clicks, "BOTTOMLEFT", -6, -14)
+    closing:SetPoint("TOPLEFT", clicks, "BOTTOMLEFT", 0, -14)
     closing:SetWidth(384)
     closing:SetJustifyH("LEFT")
     closing:SetWordWrap(true)
@@ -1104,7 +1114,7 @@ local function CreateWelcome()
         Field("readiness", readinessDB, "enabled"))
 
     -- Beside it, since both are about the orb's own small indicators.
-    checks.pipClicks = WelcomeCheck(choices, 200, 0, "Clickable status dots",
+    checks.pipClicks = WelcomeCheck(choices, COLUMN_TWO - 12, 0, "Clickable status dots",
         "The two small dots on the orb's right edge: the upper one shows Buff Watch, the lower one the preparation check. Ticked, clicking them opens the Buff Watch player list and the preparation checklist. Unticked, they only show their colour and a click on them counts as a click on the orb, so neither can be opened by accident. Also under General in the settings.",
         Field("appearance", function() return MB.db.appearance end, "pipClicks"))
 
@@ -1118,8 +1128,8 @@ local function CreateWelcome()
         local key, label = WELCOME_PREP[i][1], WELCOME_PREP[i][2]
         local column = (i - 1) % 2
         local row = math.floor((i - 1) / 2)
-        checks[key] = WelcomeCheck(choices, 12 + column * 168, -46 - row * 24, label, PrepTip(key),
-            Field("readiness", prepDB, key))
+        checks[key] = WelcomeCheck(choices, INDENT + column * (COLUMN_TWO - INDENT), -46 - row * 24,
+            label, PrepTip(key), Field("readiness", prepDB, key))
     end
 
     -- How much water and food is enough, beside their ticks: below this the
@@ -1128,7 +1138,7 @@ local function CreateWelcome()
     local amounts = {}
     local function Amount(key, row, field, name)
         local get, set = Field("conjuring", conjuringDB, field)
-        local box = NumberBox(choices, 12 + 88, -45 - row * 24, 40, name .. " to carry",
+        local box = NumberBox(choices, COLUMN_ONE_EDGE - BOX, -45 - row * 24, BOX, name .. " to carry",
             "How many " .. name:lower() .. " you want on you (20 is one full stack). Below this the orb turns yellow and starts to pulse; with none left it turns red. Untick " .. name .. " to leave it out altogether.",
             0, 400, get, set)
         welcomeChecks[#welcomeChecks + 1] = function()
@@ -1145,7 +1155,7 @@ local function CreateWelcome()
         local function item() return MB.db.reagents.items[key] end
         local get, set = Field("reagents", item, "warn")
         local name = MB.Reagents:Name(key)
-        local box = NumberBox(choices, 12 + 168 + 162, -45 - (row - 1) * 24, 40, name .. ": warn at",
+        local box = NumberBox(choices, RIGHT_EDGE - BOX, -45 - (row - 1) * 24, BOX, name .. ": warn at",
             "With this many " .. name .. " or fewer the orb turns yellow and starts to pulse; with none left it turns red. How many to restock up to is set on the Reagents page.",
             0, 200, get, set)
         welcomeChecks[#welcomeChecks + 1] = function()
@@ -1164,7 +1174,7 @@ local function CreateWelcome()
     announcing:SetTextColor(Theme:Color("dim"))
     announcing:SetText("Announcing your portals")
 
-    checks.announce = WelcomeCheck(choices, 12, -164, "Announce my portals",
+    checks.announce = WelcomeCheck(choices, INDENT, -164, "Announce my portals",
         "Says in chat that your portal is open. What it says is yours to write, under Settings, Announcements.",
         Field("announce", announceDB, "enabled"))
 
@@ -1181,7 +1191,7 @@ local function CreateWelcome()
     end
     local function ChannelButton(y, key, where)
         local get, set = Field("announce", announceDB, key)
-        local button = Cycle(choices, 234, y, 130, "Announce in",
+        local button = Cycle(choices, RIGHT_EDGE - CHANNEL, y, CHANNEL, "Announce in",
             "Where your portal is announced " .. where .. ". Party and raid chat only reach your group.",
             channels, get, set)
         welcomeChecks[#welcomeChecks + 1] = function()
@@ -1199,7 +1209,7 @@ local function CreateWelcome()
     local function Where(y, heading, note, key, which)
         Heading(y, heading)
         local line = Theme:Text(choices, 11)
-        line:SetPoint("TOPLEFT", 12, y - 18)
+        line:SetPoint("TOPLEFT", INDENT, y - 18)
         line:SetJustifyH("LEFT")
         line:SetTextColor(Theme:Color("dim"))
         line:SetText(note)
@@ -1211,7 +1221,7 @@ local function CreateWelcome()
     welcome.channelWorld = Where(-238, "Out in the world",
         "/say and /yell need a click of your own.", "channelWorld", "out in the world")
 
-    checks.atStart = WelcomeCheck(choices, 12, -276, "Announce as I start casting",
+    checks.atStart = WelcomeCheck(choices, INDENT, -276, "Announce as I start casting",
         "Out in the world the game only lets an addon speak in /say or /yell at your own click. Ticked, it is said as you click the destination in MageButler's menu. Unticked, a button appears when the portal opens, for you to click.",
         Field("announce", announceDB, "atStart"))
 

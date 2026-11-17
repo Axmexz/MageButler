@@ -59,6 +59,7 @@ local LIST_PAD, LIST_HEADER, LIST_FOOTER = 8, 28, 18
 local state = {
     active = false,
     paused = false,
+    pausedWhy = nil,   -- "combat" or "restricted", while paused
     context = "solo",
     total = 0, ok = 0, expiring = 0, weak = 0, missing = 0, unreadable = 0, outOfRange = 0,
     overall = "off",
@@ -297,7 +298,7 @@ local function Evaluate()
     local db = MB.db.buffwatch
     local context = Context()
     state.context = context
-    state.paused = false
+    state.paused, state.pausedWhy = false, nil
     ResetCounts()
 
     local intellect = Spells:GetBest("intellect")
@@ -308,7 +309,7 @@ local function Evaluate()
     end
     if AurasRestricted() then
         -- Nothing can be read reliably: show "paused", recommend nothing.
-        state.paused = true
+        state.paused, state.pausedWhy = true, "restricted"
         state.overall = "off"
         return
     end
@@ -583,7 +584,8 @@ end
 
 local function Headline()
     if state.paused then
-        return InCombatLockdown() and "Paused in combat" or "Paused (buffs cannot be read here)"
+        local why = state.pausedWhy or (InCombatLockdown() and "combat" or "restricted")
+        return why == "combat" and "Paused in combat" or "Paused (buffs cannot be read here)"
     end
     if state.overall == "ok" then return "Everyone is buffed" end
     if state.overall == "low" then
@@ -771,8 +773,16 @@ function BuffWatch:Diagnostics()
     local names = {}
     for i = 1, #ranks do names[i] = tostring(ranks[i]) end
 
+    -- Which kind of paused matters: in combat it is working as intended and
+    -- the picture below is the last one from before the pull, while
+    -- "restricted" means the client will not give buff data here at all.
+    local paused = ""
+    if state.paused then
+        paused = (state.pausedWhy == "restricted")
+            and ", paused (buffs cannot be read here)" or ", paused (in combat)"
+    end
     MB:Print("buff watch: " .. (state.active and state.context or "off")
-        .. (state.paused and ", paused" or "") .. ", " .. state.total .. " watched."
+        .. paused .. ", " .. state.total .. " watched."
         .. " Upgrade weaker ranks: " .. (db.upgradeWeaker and "on" or "off")
         .. ", rebuff under " .. tostring(db.rebuffMinutes) .. " min.")
     MB:Print("  Intellect ranks you know: " .. (#names > 0 and table.concat(names, ", ") or "none"))
@@ -1261,7 +1271,7 @@ function BuffWatch:OnEnable()
             orb:SetAttribute("unit2", nil)
         end
         applied.orb = nil
-        state.paused = true
+        state.paused, state.pausedWhy = true, "combat"
         dirty = true
         BuffWatch:RefreshVisuals()
     end)

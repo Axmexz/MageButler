@@ -836,6 +836,9 @@ builders.appearance = function(page)
     Checkbox(page, COLUMN, -116, "Status animations",
         "The status pips on the orb pulse while something needs attention, and the orb's halo and ripple move with them. Steady when all is well.",
         Field("appearance", appearance, "statusAnimations"))
+    Checkbox(page, 0, -140, "Status lights can be clicked",
+        "The two small lights on the orb's rim open the Buff Watch list and the preparation check when clicked. Unticked, a click on them goes to the orb instead, so they cannot be hit by accident.",
+        Field("appearance", appearance, "pipClicks"))
 end
 
 -------------------------------------------------------------------------------
@@ -983,7 +986,7 @@ end
 -------------------------------------------------------------------------------
 local welcome
 local welcomeChecks = {}
-local WELCOME_HEIGHT = 558
+local WELCOME_HEIGHT = 584
 
 local function readinessDB() return MB.db.readiness end
 local function prepDB() return MB.db.readiness.items end
@@ -1084,7 +1087,7 @@ local function CreateWelcome()
     local choices = CreateFrame("Frame", nil, welcome)
     choices:SetPoint("TOPLEFT", closing, "BOTTOMLEFT", 0, -16)
     choices:SetPoint("RIGHT", welcome, "RIGHT", -16, 0)
-    choices:SetHeight(270)
+    choices:SetHeight(296)
 
     checks.prep = WelcomeCheck(choices, 0, 0, "Preparation check",
         "Answers whether you are stocked before a dungeon or raid.",
@@ -1190,6 +1193,11 @@ local function CreateWelcome()
         "Out in the world the game only lets an addon speak in /say or /yell at your own click. Ticked, it is said as you click the destination in MageButler's menu. Unticked, a button appears when the portal opens, for you to click.",
         Field("announce", announceDB, "atStart"))
 
+    -- The two small lights on the orb's rim are easy to hit by accident.
+    checks.pipClicks = WelcomeCheck(choices, 0, -274, "The orb's two status lights can be clicked",
+        "They open the Buff Watch list and the preparation check. Unticked, a click on them goes to the orb instead, so they cannot be hit by accident.",
+        Field("appearance", function() return MB.db.appearance end, "pipClicks"))
+
     welcome.checks = checks
 
     -- Sized from its own text, so a larger font or a longer line cannot push
@@ -1199,7 +1207,7 @@ local function CreateWelcome()
         local text = (intro:GetStringHeight() or 0)
             + (clicks:GetStringHeight() or 0)
             + (closing:GetStringHeight() or 0)
-        welcome:SetHeight(math.max(WELCOME_HEIGHT, 54 + text + 42 + 270 + 44))
+        welcome:SetHeight(math.max(WELCOME_HEIGHT, 54 + text + 42 + 296 + 44))
     end
 
     local open = Theme:CreateButton(welcome, "Open settings", 120, 24)

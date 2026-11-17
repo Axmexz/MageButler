@@ -140,6 +140,7 @@ Config.defaults = {
     appearance = {
         accent = "arcane",
         panelAlpha = 0.92,
+        pipClicks = true,          -- the two status lights on the orb take clicks
         glow = true,
         statusAnimations = true,
     },

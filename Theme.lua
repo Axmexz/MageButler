@@ -40,6 +40,7 @@ Theme.icons = {
 
 local accentUsers = {}
 local panels = {}
+local pips = {}
 
 -------------------------------------------------------------------------------
 -- Colours
@@ -200,7 +201,18 @@ function Theme:CreatePip(orb, point, x, y)
     pip.dot:SetTexture(MB.MEDIA .. "Circle.tga")
     pip.dot:SetPoint("TOPLEFT", 3, -3)
     pip.dot:SetPoint("BOTTOMRIGHT", -3, 3)
+    pips[#pips + 1] = pip
     return pip
+end
+
+--- Whether the status lights take the mouse. They sit on the orb's rim and
+--- are easy to hit by accident; switched off, a click on one goes through to
+--- the orb underneath, and so does the tooltip.
+function Theme:RefreshPips()
+    local clickable = not MB.db or MB.db.appearance.pipClicks ~= false
+    for i = 1, #pips do
+        pips[i]:EnableMouse(clickable)
+    end
 end
 
 --- A themed text button for panels.
@@ -683,6 +695,7 @@ function Theme:OnEnable()
     MB:On("SETTINGS_CHANGED", function(section)
         if section == "appearance" or section == "all" then
             Theme:Refresh()
+            Theme:RefreshPips()
         end
     end)
 end

@@ -68,6 +68,19 @@ local function Field(section, getTable, key)
     end
 end
 
+--- Automatic trade filling, which both the Trading page and the greeting
+--- switch on and off. Switching it on gives a trade window that is already
+--- open another go, so ticking it mid-trade is not a dead click.
+local function AutoTradeField()
+    return function()
+        return MB.db.trade.enabled
+    end, function(value)
+        MB.db.trade.enabled = value
+        if value then MB.Trade:RetryAutomatic() end
+        Changed("trade")
+    end
+end
+
 -------------------------------------------------------------------------------
 -- Widgets
 -------------------------------------------------------------------------------
@@ -680,12 +693,7 @@ builders.trading = function(page)
     Header(page, 0, "Trade Assistant")
     Checkbox(page, 0, -28, "Fill trades automatically",
         "When a trade window opens, offers conjured water and food for the matching preset. Hold Shift as the trade opens to skip it once.",
-        function() return MB.db.trade.enabled end,
-        function(value)
-            MB.db.trade.enabled = value
-            if value then MB.Trade:RetryAutomatic() end
-            Changed("trade")
-        end)
+        AutoTradeField())
     Checkbox(page, COLUMN, -28, "Show Fill Trade button", "Adds a Fill Trade button above the trade window for filling by hand.",
         Field("trade", trade, "showFillButton"))
     Checkbox(page, COLUMN, -52, "Hold Shift to skip a trade",
@@ -1016,7 +1024,7 @@ end
 -------------------------------------------------------------------------------
 local welcome
 local welcomeChecks = {}
-local WELCOME_HEIGHT = 584
+local WELCOME_HEIGHT = 608
 
 -- The greeting's own grid, so everything in it stands on the same few edges:
 -- two columns, an indent for whatever sits under a heading, and one right
@@ -1125,7 +1133,7 @@ local function CreateWelcome()
     local choices = CreateFrame("Frame", nil, welcome)
     choices:SetPoint("TOPLEFT", closing, "BOTTOMLEFT", 0, -16)
     choices:SetPoint("RIGHT", welcome, "RIGHT", -16, 0)
-    choices:SetHeight(296)
+    choices:SetHeight(320)
 
     checks.prep = WelcomeCheck(choices, 0, 0, "Preparation check",
         "Answers whether you are stocked before a dungeon or raid.",
@@ -1136,8 +1144,14 @@ local function CreateWelcome()
         "The two small dots on the orb's right edge: the upper one shows Buff Watch, the lower one the preparation check. Ticked, clicking them opens the Buff Watch player list and the preparation checklist. Unticked, they only show their colour and a click on them counts as a click on the orb, so neither can be opened by accident. Also under General in the settings.",
         Field("appearance", function() return MB.db.appearance end, "pipClicks"))
 
+    -- The third of the big switches, and the one a new Mage is most likely
+    -- to want a say over before the first trade window opens.
+    checks.autoTrade = WelcomeCheck(choices, 0, -24, "Fill trades automatically",
+        "When a trade window opens, offers conjured water and food for whoever you are trading: how much, by their class, is set under Settings, Trading. Hold Shift as the window opens to skip it that once.",
+        AutoTradeField())
+
     local counts = Theme:Text(choices, 10)
-    counts:SetPoint("TOPLEFT", 0, -28)
+    counts:SetPoint("TOPLEFT", 0, -52)
     counts:SetJustifyH("LEFT")
     counts:SetTextColor(Theme:Color("dim"))
     counts:SetText("What counts as prepared, and how much is enough")
@@ -1146,7 +1160,7 @@ local function CreateWelcome()
         local key, label = WELCOME_PREP[i][1], WELCOME_PREP[i][2]
         local column = (i - 1) % 2
         local row = math.floor((i - 1) / 2)
-        checks[key] = WelcomeCheck(choices, INDENT + column * (COLUMN_TWO - INDENT), -46 - row * 24,
+        checks[key] = WelcomeCheck(choices, INDENT + column * (COLUMN_TWO - INDENT), -70 - row * 24,
             label, PrepTip(key), Field("readiness", prepDB, key))
     end
 
@@ -1156,7 +1170,7 @@ local function CreateWelcome()
     local amounts = {}
     local function Amount(key, row, field, name)
         local get, set = Field("conjuring", conjuringDB, field)
-        local box = NumberBox(choices, COLUMN_ONE_EDGE - BOX, -45 - row * 24, BOX, name .. " to carry",
+        local box = NumberBox(choices, COLUMN_ONE_EDGE - BOX, -69 - row * 24, BOX, name .. " to carry",
             "How many " .. name:lower() .. " you want on you (20 is one full stack). Below this the orb turns yellow and starts to pulse; with none left it turns red. Untick " .. name .. " to leave it out altogether.",
             0, 400, get, set)
         welcomeChecks[#welcomeChecks + 1] = box.Refresh
@@ -1171,7 +1185,7 @@ local function CreateWelcome()
         local function item() return MB.db.reagents.items[key] end
         local get, set = Field("reagents", item, "warn")
         local name = MB.Reagents:Name(key)
-        local box = NumberBox(choices, RIGHT_EDGE - BOX, -45 - (row - 1) * 24, BOX, name .. ": warn at",
+        local box = NumberBox(choices, RIGHT_EDGE - BOX, -69 - (row - 1) * 24, BOX, name .. ": warn at",
             "With this many " .. name .. " or fewer the orb turns yellow and starts to pulse; with none left it turns red. How many to restock up to is set on the Reagents page.",
             0, 200, get, set)
         welcomeChecks[#welcomeChecks + 1] = box.Refresh
@@ -1183,12 +1197,12 @@ local function CreateWelcome()
     -- click. The wording itself is written on the Announcements page.
     local function announceDB() return MB.db.announce end
     local announcing = Theme:Text(choices, 10)
-    announcing:SetPoint("TOPLEFT", 0, -146)
+    announcing:SetPoint("TOPLEFT", 0, -170)
     announcing:SetJustifyH("LEFT")
     announcing:SetTextColor(Theme:Color("dim"))
     announcing:SetText("Announcing your portals")
 
-    checks.announce = WelcomeCheck(choices, INDENT, -164, "Announce my portals",
+    checks.announce = WelcomeCheck(choices, INDENT, -188, "Announce my portals",
         "Says in chat that your portal is open. What it says is yours to write, under Settings, Announcements.",
         Field("announce", announceDB, "enabled"))
 
@@ -1224,12 +1238,12 @@ local function CreateWelcome()
         return ChannelButton(y - 2, key, which)
     end
 
-    welcome.channelInstance = Where(-192, "In dungeons and raids",
+    welcome.channelInstance = Where(-216, "In dungeons and raids",
         "Said by itself as the portal opens.", "channelInstance", "inside a dungeon or raid")
-    welcome.channelWorld = Where(-238, "Out in the world",
+    welcome.channelWorld = Where(-262, "Out in the world",
         "/say and /yell need a click of your own.", "channelWorld", "out in the world")
 
-    checks.atStart = WelcomeCheck(choices, INDENT, -276, "Announce as I start casting",
+    checks.atStart = WelcomeCheck(choices, INDENT, -300, "Announce as I start casting",
         "Out in the world the game only lets an addon speak in /say or /yell at your own click. Ticked, it is said as you click the destination in MageButler's menu. Unticked, a button appears when the portal opens, for you to click.",
         Field("announce", announceDB, "atStart"))
 
@@ -1242,7 +1256,7 @@ local function CreateWelcome()
         local text = (intro:GetStringHeight() or 0)
             + (clicks:GetStringHeight() or 0)
             + (closing:GetStringHeight() or 0)
-        welcome:SetHeight(math.max(WELCOME_HEIGHT, 54 + text + 42 + 296 + 44))
+        welcome:SetHeight(math.max(WELCOME_HEIGHT, 54 + text + 42 + 320 + 44))
     end
 
     local open = Theme:CreateButton(welcome, "Open settings", 120, 24)

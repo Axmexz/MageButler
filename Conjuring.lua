@@ -36,9 +36,24 @@ for _, list in ipairs({ WATER, FOOD, SHARED }) do
 end
 for i = 1, #MB.Spells.GEMS do MB:TrackItem(MB.Spells.GEMS[i].item) end
 
+-- Which item each rank of the spell conjures, and which rank number it is.
+-- Both lists run weakest first and are the same length, so rank N of the
+-- spell makes the Nth item: Conjure Water Rank 4 makes Conjured Spring
+-- Water, which is drinkable from level 25.
+local itemOfSpell, rankOfSpell = {}, {}
+for _, kind in ipairs({ "water", "food" }) do
+    local items = (kind == "water") and WATER or FOOD
+    local ranks = MB.Spells.RANKS[kind]
+    for i = 1, math.min(#items, #ranks) do
+        itemOfSpell[ranks[i]] = items[i]
+        rankOfSpell[ranks[i]] = i
+    end
+end
+
 local counts = { water = 0, food = 0, gem = 0 }
 local bestItem = {}
 local lastState = {}
+local chosen = {}   -- [kind] = the rank stepped down to, while it is not the strongest
 
 -------------------------------------------------------------------------------
 -- Inventory
@@ -196,9 +211,87 @@ end
 -------------------------------------------------------------------------------
 -- Spell selection
 -------------------------------------------------------------------------------
---- Highest learned rank of Conjure Water / Conjure Food.
+--- The rank of Conjure Water / Conjure Food the button will cast: the one the
+--- player has stepped down to, or the strongest they know. A rank that is no
+--- longer in the spellbook is dropped rather than carried.
 function Conjuring:GetSpell(kind)
+    local pick = chosen[kind]
+    if pick then
+        local ranks = MB.Spells:KnownRanks(kind)
+        for i = 1, #ranks do
+            if ranks[i] == pick then return pick end
+        end
+        chosen[kind] = nil
+    end
     return MB.Spells:GetBest(kind)
+end
+
+--- Steps down to the next rank, and round to the strongest again below the
+--- weakest. Lower ranks are what a low-level player can actually eat or
+--- drink, so this is how a stock of them is made. Returns the rank now set,
+--- or nil when the player knows only one.
+function Conjuring:CycleRank(kind)
+    local ranks = MB.Spells:KnownRanks(kind)
+    if #ranks < 2 then return nil end
+
+    local current = self:GetSpell(kind)
+    local at = #ranks
+    for i = 1, #ranks do
+        if ranks[i] == current then
+            at = i
+            break
+        end
+    end
+
+    local step = (at > 1) and ranks[at - 1] or ranks[#ranks]
+    -- The strongest is held as "no choice", so levelling up follows along.
+    chosen[kind] = (step ~= ranks[#ranks]) and step or nil
+    return self:GetSpell(kind)
+end
+
+--- What the button is set to conjure: the spell, its rank number, how many
+--- ranks are known, the item it makes and the level needed to use that item.
+function Conjuring:RankInfo(kind)
+    local spellID = self:GetSpell(kind)
+    if not spellID then return nil end
+    local itemID = itemOfSpell[spellID]
+    return spellID, rankOfSpell[spellID], #MB.Spells:KnownRanks(kind),
+        itemID, itemID and self:MinLevel(itemID) or nil
+end
+
+--- Whether a rank below the strongest is set.
+function Conjuring:SteppedDown(kind)
+    return chosen[kind] ~= nil
+end
+
+--- Which rank an item is, for anything that shows one.
+function Conjuring:RankOfItem(itemID)
+    local list = (kindOf[itemID] == "water") and WATER or FOOD
+    for i = 1, #list do
+        if list[i] == itemID then return i end
+    end
+    return nil
+end
+
+--- Every rank of a kind carried, weakest first, as a list of
+--- { item, count, rank, level }. Built on a tooltip, not on a redraw.
+function Conjuring:RanksCarried(kind)
+    local list = (kind == "water") and WATER or FOOD
+    local out = {}
+    for i = 1, #list do
+        local itemID = list[i]
+        local count = MB:CountOf(itemID)
+        if count > 0 then
+            out[#out + 1] = { item = itemID, count = count, rank = i, level = self:MinLevel(itemID) }
+        end
+    end
+    for i = 1, #SHARED do
+        local count = MB:CountOf(SHARED[i])
+        if count > 0 then
+            out[#out + 1] = { item = SHARED[i], count = count, level = self:MinLevel(SHARED[i]) }
+        end
+    end
+    return out
 end
 
 --- The gem to conjure next: the strongest learned gem the player does not hold

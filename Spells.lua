@@ -64,6 +64,7 @@ local bookIDs = {}      -- [spellID] = true for every active spell in the book
 local bookTop = {}      -- [localised name] = spellID of the highest learned rank
 local teleports, portals = {}, {}
 local best = {}
+local knownRanks = {}   -- [key] = every rank of it the player knows, weakest first
 local gemSpells = {}    -- [index into Spells.GEMS] = the learned spell, or false
 local signature = ""
 local SIGNATURE_KEYS = { "water", "food", "ritual", "intellect", "brilliance" }
@@ -202,6 +203,29 @@ local function HighestRank(key)
     return nil
 end
 
+--- Fills `out` with every rank of a spell the player knows, weakest first.
+--- The book's own top rank can be an ID the table above does not list; it is
+--- still the strongest, so it goes at the end, where the ranks below it can
+--- be stepped through from.
+local function LearnedRanks(key, out)
+    wipe(out)
+    local ranks = RANKS[key]
+    for i = 1, #ranks do
+        local spellID = ranks[i]
+        if bookIDs[spellID] or API.IsSpellKnown(spellID) then
+            out[#out + 1] = spellID
+        end
+    end
+    local top = best[key]
+    if top then
+        for i = 1, #out do
+            if out[i] == top then return out end
+        end
+        out[#out + 1] = top
+    end
+    return out
+end
+
 function Spells:Scan()
     if not ReadSpellbook() then return end
 
@@ -209,6 +233,7 @@ function Spells:Scan()
     BuildTravelList(PORTALS, portals)
     for key in pairs(RANKS) do
         best[key] = HighestRank(key)
+        knownRanks[key] = LearnedRanks(key, knownRanks[key] or {})
     end
     -- Which gems can be conjured is asked on every redraw, so it is worked
     -- out here, once per scan, like everything else that comes from the book.
@@ -246,6 +271,14 @@ function Spells:GetPortals() return portals end
 
 --- Highest learned rank of "water", "food", "ritual", "intellect" or "brilliance".
 function Spells:GetBest(key) return best[key] end
+
+local NO_RANKS = {}
+
+--- Every rank of one of those the player knows, weakest first. Rebuilt by
+--- each scan of the spellbook, so it is for reading only.
+function Spells:KnownRanks(key)
+    return knownRanks[key] or NO_RANKS
+end
 
 --- The learned Conjure Mana Gem spell for an entry of Spells.GEMS, or nil.
 function Spells:GemSpell(index)

@@ -277,6 +277,12 @@ local function CreateRoundButton(key, template)
     button.count = Theme:Text(button, 11, "OVERLAY", "OUTLINE")
     button.count:SetPoint("BOTTOMRIGHT", 3, -1)
 
+    -- Which rank the button conjures, shown only while that is not the
+    -- strongest: otherwise a rank stepped down to is easy to forget about.
+    button.rank = Theme:Text(button, 10, "OVERLAY", "OUTLINE")
+    button.rank:SetPoint("TOPLEFT", -2, 2)
+    button.rank:Hide()
+
     button:HookScript("OnEnter", function(self)
         ButtonTooltip(self)
     end)
@@ -482,8 +488,36 @@ ButtonTooltip = function(button)
         else
             Theme:TipLine(GameTooltip, "In bags: " .. have, "text")
         end
+        -- Which rank is set to be conjured, and from what level it can be
+        -- eaten or drunk: that is what decides who in the group can use it.
+        local _, rank, ranks, item, level = Conjuring:RankInfo(key)
+        if rank and level then
+            local line = "Conjures Rank " .. rank .. ", usable from level " .. level
+            if item and MB.inventoryKnown then
+                line = line .. "  (" .. MB:CountOf(item) .. " carried)"
+            end
+            Theme:TipLine(GameTooltip, line, Conjuring:SteppedDown(key) and "gold" or "text", true)
+        end
+
+        -- Lower ranks are kept for lower-level players, and the count above
+        -- is of the strongest alone, so what else is carried is said here.
+        if MB.inventoryKnown then
+            local carried = Conjuring:RanksCarried(key)
+            for i = #carried, 1, -1 do
+                local entry = carried[i]
+                if entry.item ~= item then
+                    local name = entry.rank and ("Rank " .. entry.rank) or (API.ItemName(entry.item) or "Other")
+                    Theme:TipLine(GameTooltip, "  " .. name .. ": " .. entry.count
+                        .. "  (level " .. entry.level .. ")", "dim")
+                end
+            end
+        end
+
+        if ranks and ranks > 1 then
+            AddHint("Right-click: step down a rank, for players too low for this one")
+        end
         if key == "food" and Spells:GetBest("ritual") then
-            AddHint("Right-click: Ritual of Refreshment")
+            AddHint("Shift+right-click: Ritual of Refreshment")
         end
     elseif key == "gem" then
         local spellID, allHeld = Conjuring:GetGemCast()
@@ -558,6 +592,17 @@ function Radial:RefreshVisuals()
         SetButtonState(button, Conjuring:GetSpell(kind) ~= nil)
         local state = Conjuring:State(kind)
         SetCount(button, known and Conjuring:Count(kind) or nil, state == "off" and "ok" or state)
+
+        -- A rank stepped down to is marked, so it is not conjured for the
+        -- rest of the evening by mistake.
+        local _, rank = Conjuring:RankInfo(kind)
+        if rank and Conjuring:SteppedDown(kind) then
+            button.rank:SetText("R" .. rank)
+            button.rank:SetTextColor(Theme:Color("gold"))
+            button.rank:Show()
+        else
+            button.rank:Hide()
+        end
     end
 
     local gem = buttons.gem
@@ -613,8 +658,13 @@ local function RefreshAttributes()
     local ritual = Spells:GetBest("ritual")
     food:SetAttribute("*type1", foodSpell and "spell" or nil)
     food:SetAttribute("*spell1", foodSpell)
-    food:SetAttribute("*type2", ritual and "spell" or nil)
-    food:SetAttribute("*spell2", ritual)
+    -- A plain right-click steps down a rank, which casts nothing, so Ritual
+    -- of Refreshment is the one with Shift held. Named for that modifier
+    -- alone: the client looks at "shift-type2" before the "*" wildcard.
+    food:SetAttribute("shift-type2", ritual and "spell" or nil)
+    food:SetAttribute("shift-spell2", ritual)
+    food:SetAttribute("*type2", nil)
+    food:SetAttribute("*spell2", nil)
 
     local gem = buttons.gem
     local gemSpell = Conjuring:GetGemCast()
@@ -623,6 +673,24 @@ local function RefreshAttributes()
     gem:SetAttribute("*spell1", gemSpell)
     gem:SetAttribute("*type2", gemItem and "item" or nil)
     gem:SetAttribute("*item2", gemItem and ("item:" .. gemItem) or nil)
+end
+
+--- Steps the water or food button down to the next rank, and round to the
+--- strongest again below the weakest: a stock of a rank a low-level player
+--- can drink is made by stepping down and conjuring as usual. The rank is a
+--- secure attribute, so it cannot be changed in combat, and that is said
+--- rather than silently ignored. Called from the player's own right-click.
+function Radial:StepRank(kind)
+    if InCombatLockdown() then
+        MB:Notify("The rank can only be changed out of combat.", "warn")
+        return
+    end
+    if not Conjuring:CycleRank(kind) then return end
+    RefreshAttributes()
+    self:RefreshVisuals()
+    -- The cursor is on the button, so its tooltip is the answer to the click.
+    local button = buttons[kind]
+    if GameTooltip:IsOwned(button) then ButtonTooltip(button) end
 end
 
 -- Where the open side is, for each combination of blocked edges. The key is
@@ -847,6 +915,16 @@ function Radial:OnEnable()
         local button = CreateRoundButton(key, "SecureActionButtonTemplate")
         button:RegisterForClicks("AnyUp", "AnyDown")
         button:SetAttribute("useOnKeyDown", false)
+    end
+
+    -- A plain right-click on water or food steps down a rank. It casts
+    -- nothing, so it is done here and not by a secure attribute; with Shift
+    -- held the food button casts Ritual of Refreshment instead.
+    for _, key in ipairs(CONJURED) do
+        buttons[key]:HookScript("PostClick", function(_, click, down)
+            if down or click ~= "RightButton" or IsShiftKeyDown() then return end
+            Radial:StepRank(key)
+        end)
     end
 
     -- Trade button: no protected action involved.

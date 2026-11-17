@@ -477,8 +477,9 @@ builders.general = function(page)
         copy:SetEnabled(selected ~= nil)
     end
 
-    Label(page, 0, -410, "MageButler v" .. MB.version .. "  |cff8f9fc9by " .. MB.author .. "|r", 12)
-    Label(page, 0, -428, "Your personal Mage assistant for WoW Forever.  /mb for commands.", 10, "dim")
+    Label(page, 0, -404, "MageButler v" .. MB.version .. "  |cff8f9fc9by " .. MB.author .. "|r", 12)
+    Label(page, 0, -422, "Your personal Mage assistant for WoW Forever.  /mb for commands.", 10, "dim")
+    Label(page, 0, -438, "Thanks to Ski Infinite and Keen Mage for their help.", 10, "dim")
 end
 
 builders.radial = function(page)

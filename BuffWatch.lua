@@ -727,6 +727,39 @@ function BuffWatch:AddTooltipLines(tooltip)
     end
 end
 
+--- What Buff Watch makes of each player, for /mb debug. The spell IDs are
+--- the point of it: everything that decides who needs a buff rests on the
+--- rank the client reports for the aura they carry. If that ID is one this
+--- table does not know, or the same ID comes back whatever the rank really
+--- is, the comparison is working from the wrong numbers, and these lines are
+--- what show it.
+function BuffWatch:Diagnostics()
+    local db = MB.db.buffwatch
+    local ranks = KnownRanks("intellect")
+    local names = {}
+    for i = 1, #ranks do names[i] = tostring(ranks[i]) end
+
+    MB:Print("buff watch: " .. (state.active and state.context or "off")
+        .. (state.paused and ", paused" or "") .. ", " .. state.total .. " watched."
+        .. " Upgrade weaker ranks: " .. (db.upgradeWeaker and "on" or "off")
+        .. ", rebuff under " .. tostring(db.rebuffMinutes) .. " min.")
+    MB:Print("  Intellect ranks you know: " .. (#names > 0 and table.concat(names, ", ") or "none"))
+
+    for i = 1, #state.units do
+        local record = state.units[i]
+        local cast = record.cast
+        MB:Print("  " .. tostring(record.name) .. ": " .. tostring(record.status)
+            .. ", level " .. tostring(record.level or "?")
+            .. ", carries " .. tostring(record.aura or "nothing")
+            .. " (strength " .. tostring(record.strength or "not known") .. ")"
+            .. ", you would cast " .. tostring(cast or "?")
+            .. " (strength " .. tostring((cast and STRENGTH[cast]) or "not known") .. ")")
+    end
+    if state.total == 0 then
+        MB:Print("  nobody is being watched.")
+    end
+end
+
 -------------------------------------------------------------------------------
 -- Updating: driven by events, never by polling
 -------------------------------------------------------------------------------

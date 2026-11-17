@@ -735,6 +735,12 @@ function MB:PrintDiagnostics()
             .. ", glow setting: " .. (self.db.appearance.glow and "on" or "off") .. ".")
     end
 
+    -- Who Buff Watch would buff and why, with the rank the client reports
+    -- for each buff: the numbers behind "needs an upgrade".
+    if self.BuffWatch and self.BuffWatch.Diagnostics then
+        self.BuffWatch:Diagnostics()
+    end
+
     local saved = self.Config.root and self.Config.root.trail
     PrintTrail("before the last reload", saved and saved.last, 10)
     PrintTrail("this session", self.trail, 15)

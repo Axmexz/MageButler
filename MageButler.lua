@@ -57,6 +57,7 @@ local function Call(fn, ...)
         fn(...)
     end
 end
+MB.Call = Call
 
 --- Registers a callback for a game event. Returns false when the client does
 --- not know the event, so optional events can be requested safely.
@@ -406,6 +407,7 @@ end
 -------------------------------------------------------------------------------
 local SETTLE_DELAY = 2.0   -- quiet period after a loading screen
 local SETTLE_STEP = 0.5    -- how often the bags are asked after that
+local SETTLE_SLOW = 2.0    -- and how often once that patience has run out
 local SETTLE_TRIES = 16    -- asks after a loading screen before empty bags are believed
 local DOUBT_TRIES = 4      -- the same when nothing explains why they read empty
 local LOADING_LIMIT = 90   -- a loading screen older than this is taken to be over
@@ -424,6 +426,7 @@ local closedAt                      -- when the gate last closed, for the trail
 local asking = false                -- a timer is about to ask the bags again
 local askToken = 0
 local believedEmpty = false         -- the bags read empty for long enough to be believed
+local heldSilent = false            -- bags that will not be read have been reported once
 local inventoryWaiters = {}
 
 --- Has an item counted from now on. Modules call this as they load.
@@ -476,6 +479,22 @@ local function Probe()
     return believedEmpty and "counts" or nil
 end
 
+--- Positive evidence that the bags are empty: every bag that reports slots
+--- reports all of them free. A bag the client will not open reports no free
+--- slots, so bags that cannot be read are never taken for empty ones.
+local function BagsLookEmpty()
+    local slots = 0
+    for bag = 0, MB.LAST_BAG do
+        local n = API.BagSlots(bag)
+        if n > 0 then
+            local free = API.BagFree(bag)
+            if free < n then return false end
+            slots = slots + n
+        end
+    end
+    return slots > 0
+end
+
 --- Reads every tracked count and keeps the lot or none of it. Returns true
 --- and whether any count changed, or false when the bags gave nothing to go
 --- on and the counts were left as they were. `expected` is false for a read
@@ -499,14 +518,25 @@ local function ReadSnapshot(source, expected)
         for i = 1, #tracked do
             fresh[i] = 0
         end
+        local seen = 0
         for bag = 0, MB.LAST_BAG do
             for slot = 1, API.BagSlots(bag) do
                 local itemID, count = API.BagItem(bag, slot)
-                local index = itemID and trackedIndex[itemID]
-                if index then
-                    fresh[index] = fresh[index] + count
+                if itemID then
+                    seen = seen + 1
+                    local index = trackedIndex[itemID]
+                    if index then
+                        fresh[index] = fresh[index] + count
+                    end
                 end
             end
+        end
+        -- The probe had an item out of a slot a moment ago. If this second
+        -- way of asking gives nothing at all, the bags stopped answering
+        -- in between, and a page of zeros is not a read.
+        if seen == 0 and not believedEmpty then
+            MB:Log("the slots stopped answering mid-read (" .. source .. ")")
+            return false
         end
     end
     if how ~= readingBy then
@@ -574,6 +604,7 @@ end
 local function Open(why)
     askToken = askToken + 1
     asking = false
+    heldSilent = false
     MB.inventoryReady = true
     local held = closedAt and string.format(" after %.1fs", GetTime() - closedAt) or ""
     closedAt = nil
@@ -593,21 +624,37 @@ end
 --- Asks the bags again shortly, and goes on asking until they answer. After a
 --- loading screen they get a quiet moment first and plenty of patience; bags
 --- that read empty for no known reason are asked sooner and believed sooner.
-local function Ask(tries, patience, quiet)
+local function Ask(tries, patience, quiet, slow)
     askToken = askToken + 1
     asking = true
     local token = askToken
-    C_Timer.After((quiet and tries == 0) and SETTLE_DELAY or SETTLE_STEP, function()
+    local wait = SETTLE_STEP
+    if slow then
+        wait = SETTLE_SLOW
+    elseif quiet and tries == 0 then
+        wait = SETTLE_DELAY
+    end
+    C_Timer.After(wait, function()
         if token ~= askToken then return end
         asking = false
         if Probe() then
             Open("the bags answered")
         elseif tries < patience then
             Ask(tries + 1, patience, quiet)
-        else
-            -- Bags that go on reading empty are empty.
+        elseif BagsLookEmpty() then
+            -- Bags that go on reading empty, and say slot by slot that they
+            -- are, are empty.
             believedEmpty = true
             Open("the bags stayed empty")
+        else
+            -- They hold something the client will not show. Nothing is
+            -- believed and nothing is zeroed: the counts stay as they were,
+            -- and the bags are asked again, less often.
+            if not heldSilent then
+                heldSilent = true
+                MB:Log("the bags hold what cannot be read: counts held")
+            end
+            Ask(patience, patience, quiet, true)
         end
     end)
 end
@@ -672,9 +719,12 @@ local function LoadingEnded(event)
     if not MB.isMage then return end
     loading = false
     believedEmpty = false
-    if MB.inventoryReady and event == "LOADING_SCREEN_DISABLED" then
-        -- A bag update got there first. One more look, now the screen is gone.
-        MB:RefreshInventory(false, "loading screen over")
+    if MB.inventoryReady then
+        -- Something got there first and the counts are good. One more look,
+        -- now the world is back, rather than freezing them again.
+        if not MB:RefreshInventory(false, event) then
+            Ask(0, SETTLE_TRIES, true)
+        end
         return
     end
     Close(event)

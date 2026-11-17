@@ -101,12 +101,20 @@ end
 --- again.
 local function Confirm()
     confirming = true
-    MB:RefreshInventory(false, "second look")
+    -- Kept apart, as the core keeps its own callers apart, so an error in the
+    -- read cannot leave the flag standing and silence the second look for the
+    -- rest of the session.
+    MB.Call(MB.RefreshInventory, MB, false, "second look")
     confirming = false
 end
 
 function Reagents:RefreshInventory()
     ReadCounts()
+
+    -- Nothing is said, and nothing is marked as said, while MageButler is
+    -- switched off: a shortage is still raised once it is switched back on.
+    if not MB:IsActive() then return end
+
     local check, low = false, nil
     for _, key in ipairs(self.ORDER) do
         local state = self:State(key)
@@ -127,7 +135,7 @@ function Reagents:RefreshInventory()
             check = true
         end
     end
-    if low and MB:IsActive() then
+    if low then
         MB:Notify("Low on " .. table.concat(low, ", ") .. ".", "warn")
     end
     if check then

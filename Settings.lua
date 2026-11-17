@@ -30,6 +30,7 @@ local IGNORED_KEYS = {
 local frame
 local pages, navButtons = {}, {}
 local refreshers = {}
+local Refresh            -- defined below; the panel's own redraw
 local builders = {}
 local capture
 
@@ -129,9 +130,11 @@ local function Checkbox(page, x, y, text, tooltip, get, set)
     end)
     Theme:AttachTooltip(check, tooltip and (text or tooltip) or nil, text and tooltip or nil)
 
-    refreshers[#refreshers + 1] = function()
+    local function RefreshValue()
         check:SetChecked(get() and true or false)
     end
+    refreshers[#refreshers + 1] = RefreshValue
+    check.Refresh = RefreshValue   -- the greeting reuses its own widgets' refreshers
     return check
 end
 
@@ -213,11 +216,13 @@ local function NumberBox(page, x, y, width, title, tooltip, low, high, get, set)
     end)
     Theme:AttachTooltip(box, title, tooltip)
 
-    refreshers[#refreshers + 1] = function()
+    local function RefreshValue()
         if not box:HasFocus() then
             box:SetText(tostring(get()))
         end
     end
+    refreshers[#refreshers + 1] = RefreshValue
+    box.Refresh = RefreshValue   -- the greeting reuses its own widgets' refreshers
     return box
 end
 
@@ -424,11 +429,11 @@ builders.general = function(page)
     Header(page, -136, "Preparation Check")
     Checkbox(page, 0, -164, "Show the preparation indicator",
         "A small pip on the orb: green when you carry enough water, food, a mana gem and reagents. Click the pip for the checklist.",
-        Field("general", readiness, "enabled"))
+        Field("readiness", readiness, "enabled"))
     Checkbox(page, 0, -188, "Report on ready checks", "Shows the preparation result whenever a ready check starts.",
-        Field("general", readiness, "onReadyCheck"))
+        Field("readiness", readiness, "onReadyCheck"))
     Checkbox(page, COLUMN, -188, "Warn when entering instances", "Shows what is missing when you walk into a dungeon or raid short of supplies.",
-        Field("general", readiness, "onInstance"))
+        Field("readiness", readiness, "onInstance"))
 
     Label(page, 0, -216, "Count towards ready", 10, "dim")
     local function prepItems() return MB.db.readiness.items end
@@ -437,7 +442,7 @@ builders.general = function(page)
         local column = (i - 1) % 4
         local row = math.floor((i - 1) / 4)
         Checkbox(page, column * 108, -234 - row * 24, label, PrepTip(key),
-            Field("general", prepItems, key))
+            Field("readiness", prepItems, key))
     end
 
     Header(page, -292, "Character Profile")
@@ -616,17 +621,23 @@ builders.reagents = function(page)
         local check = Checkbox(page, columns[1], y, Reagents:Name(key),
             "Track and restock this reagent. It is left alone until you are high enough and have learned a spell that uses it.",
             Field("reagents", item, "enabled"))
+        -- The longest name plus its reason would otherwise run under the
+        -- Target box, so the label is held inside its own column.
+        check.text:SetWidth(columns[2] - 33)
+        check.text:SetWordWrap(false)
         refreshers[#refreshers + 1] = function()
             -- Say why a reagent is being left alone, rather than silently
             -- doing nothing on a Mage who is not high enough yet.
             local name = Reagents:Name(key)
             local reason = Reagents:InactiveReason(key)
             if reason == "level" then
-                name = name .. "  |cff8f9fc9(from level " .. Reagents:MinLevel(key) .. ")|r"
+                name = name .. "  |cff8f9fc9(lvl " .. Reagents:MinLevel(key) .. ")|r"
             elseif reason == "spell" then
-                name = name .. "  |cff8f9fc9(spell not learned)|r"
+                name = name .. "  |cff8f9fc9(unlearned)|r"
             end
             check.text:SetText(name)
+            -- The clickable area follows the drawn label, never past it.
+            check:SetHitRectInsets(0, -(math.min(check.text:GetStringWidth(), check.text:GetWidth()) + 8), 0, 0)
         end
 
         NumberBox(page, columns[2], y + 1, 48, "Target", "How many to carry after restocking.", 0, 200,
@@ -658,7 +669,7 @@ builders.conjuring = function(page)
     Checkbox(page, COLUMN, -64, "Warn when supplies run out", "A short notification the moment your last conjured water or food is gone.",
         Field("conjuring", conjuring, "warnMissing"))
 
-    Note(page, -94, "The radial buttons cast the highest rank you have learned, found in your spellbook. The Mana Gem button conjures the strongest gem you are not carrying; right-click uses your best gem. MageButler never casts on its own.")
+    Note(page, -94, "The radial buttons cast the highest rank you have learned, unless you have right-clicked one to step down a rank. The Mana Gem button conjures the strongest gem you are not carrying; right-click uses your best gem. MageButler never casts on its own.")
 end
 
 builders.trading = function(page)
@@ -699,7 +710,9 @@ builders.trading = function(page)
                 if box and box.HasFocus and box:HasFocus() then box:ClearFocus() end
             end
             selected = value
-            Changed("trade") -- redraws the table for the new selection
+            -- Which table is on screen is this panel's own business: nothing
+            -- in the saved settings changed, so nobody else is told.
+            Refresh() -- redraws the table for the new selection
         end)
     PanelButton(page, 232, -86, "Standard numbers", 130,
         "Puts every number in all three tables back to MageButler's standard amounts.", function()
@@ -707,7 +720,7 @@ builders.trading = function(page)
         end)
 
     local classColors = _G.RAID_CLASS_COLORS
-    local classes = MB.Trade.CLASSES
+    local classes = MB.Config.CLASSES
     local perColumn = math.ceil(#classes / 2)
     for column = 0, 1 do
         local x = column * 222
@@ -854,7 +867,7 @@ end
 -------------------------------------------------------------------------------
 -- Frame
 -------------------------------------------------------------------------------
-local function Refresh()
+Refresh = function()
     if not frame or not frame:IsShown() then return end
     for i = 1, #refreshers do
         refreshers[i]()
@@ -1027,9 +1040,7 @@ local WELCOME_PREP = {
 --- up to date whenever the greeting is shown.
 local function WelcomeCheck(parent, x, y, text, tooltip, get, set)
     local check = Checkbox(parent, x, y, text, tooltip, get, set)
-    welcomeChecks[#welcomeChecks + 1] = function()
-        check:SetChecked(get() and true or false)
-    end
+    welcomeChecks[#welcomeChecks + 1] = check.Refresh
     return check
 end
 
@@ -1141,9 +1152,7 @@ local function CreateWelcome()
         local box = NumberBox(choices, COLUMN_ONE_EDGE - BOX, -45 - row * 24, BOX, name .. " to carry",
             "How many " .. name:lower() .. " you want on you (20 is one full stack). Below this the orb turns yellow and starts to pulse; with none left it turns red. Untick " .. name .. " to leave it out altogether.",
             0, 400, get, set)
-        welcomeChecks[#welcomeChecks + 1] = function()
-            box:SetText(tostring(get()))
-        end
+        welcomeChecks[#welcomeChecks + 1] = box.Refresh
         amounts[key] = box
     end
     Amount("water", 0, "waterTarget", "Water")
@@ -1158,9 +1167,7 @@ local function CreateWelcome()
         local box = NumberBox(choices, RIGHT_EDGE - BOX, -45 - (row - 1) * 24, BOX, name .. ": warn at",
             "With this many " .. name .. " or fewer the orb turns yellow and starts to pulse; with none left it turns red. How many to restock up to is set on the Reagents page.",
             0, 200, get, set)
-        welcomeChecks[#welcomeChecks + 1] = function()
-            box:SetText(tostring(get()))
-        end
+        welcomeChecks[#welcomeChecks + 1] = box.Refresh
         amounts[key] = box
     end
     welcome.amounts = amounts
@@ -1194,13 +1201,7 @@ local function CreateWelcome()
         local button = Cycle(choices, RIGHT_EDGE - CHANNEL, y, CHANNEL, "Announce in",
             "Where your portal is announced " .. where .. ". Party and raid chat only reach your group.",
             channels, get, set)
-        welcomeChecks[#welcomeChecks + 1] = function()
-            local text = channels[1][2]
-            for i = 1, #channels do
-                if channels[i][1] == get() then text = channels[i][2] end
-            end
-            button.label:SetText(text)
-        end
+        welcomeChecks[#welcomeChecks + 1] = button.Refresh
         return button
     end
 

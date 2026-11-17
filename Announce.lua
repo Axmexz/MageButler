@@ -36,12 +36,14 @@ local NEEDS_CLICK = { SAY = true, YELL = true }   -- outside a dungeon or raid
 local MAX_LENGTH = 255   -- the longest chat message the game takes
 local REPEAT_GUARD = 3   -- seconds in which one spell is not announced twice
 local OFFER_TIME = 20    -- how long the button waits to be clicked
-local START_GUARD = 15   -- seconds a cast announced at its start is given to finish
+local START_GUARD = 30   -- seconds a cast announced at its start is given to finish,
+                         -- enough for a 10s portal slowed by Curse of Tongues
 
 local travel = {}        -- [spellID] = { kind, place, name } for each learned destination
 local byName = {}        -- the same entries, by the spell's name
 local refused = {}       -- [chatType] = true once the client has refused an unprompted send
 local sending            -- the chat type being sent at this instant
+local sendingPrompted    -- whether that send was made inside the player's own click
 local lastCast, lastSpell, lastTime
 local startedSpell, startedTime   -- a cast already announced at the click that started it
 local offer, offered
@@ -153,14 +155,17 @@ end
 -- Saying it
 -------------------------------------------------------------------------------
 --- Sends one chat message. False when the client would not take it.
-local function Send(text, chatType)
+--- `prompted` says the send is being made inside the player's own click,
+--- which is the one the game is expected to allow: a refusal of that says
+--- nothing about whether the channel may be used unprompted.
+local function Send(text, chatType, prompted)
     local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or _G.SendChatMessage
     if not send then return false end
-    sending = chatType
+    sending, sendingPrompted = chatType, prompted and true or false
     local ok = pcall(send, text, chatType)
     -- A refusal is reported while the call is still running, and clears this.
     local taken = ok and sending ~= nil
-    sending = nil
+    sending, sendingPrompted = nil, nil
     return taken
 end
 
@@ -184,7 +189,7 @@ local function TakeOffer()
     local what = offered
     HideOffer()
     if not what then return end
-    if not Locked() and Send(what.text, what.chatType) then return end
+    if not Locked() and Send(what.text, what.chatType, true) then return end
     if not OpenChat(what.text, what.chatType) then
         MB:Notify("The game would not let that be announced here.", "warn")
     end
@@ -345,7 +350,7 @@ function Announce:OnTravelClick(spellID)
 
     local template = (entry.kind == "teleport") and db.teleportText or db.startText
     local text = self:Format(template, entry.place, entry.name)
-    if text ~= "" and Send(text, chatType) then
+    if text ~= "" and Send(text, chatType, true) then
         startedSpell, startedTime = spellID, now
     end
 end
@@ -363,7 +368,10 @@ function Announce:OnEnable()
     -- unprompted this session.
     local function OnBlocked(_, addon)
         if sending and not MB.IsSecret(addon) and addon == ADDON_NAME then
-            refused[sending] = true
+            -- Only an unprompted send says anything about the channel. One
+            -- made inside the player's click is the case the game is meant
+            -- to allow, so its refusal is reported and nothing more.
+            if not sendingPrompted then refused[sending] = true end
             sending = nil
         end
     end
@@ -378,6 +386,22 @@ function Announce:OnEnable()
             HideOffer()
         end
     end)
-    MB:RegisterEvent("LOADING_SCREEN_ENABLED", HideOffer)
-    MB:RegisterEvent("PLAYER_LEAVING_WORLD", HideOffer)
+    -- Whether an unprompted /say is allowed turns on where the player is, so
+    -- a refusal is given up on leaving: it is a fact about the place, not
+    -- about the channel, and within one place it still sticks.
+    local function LeaveWorld()
+        wipe(refused)
+        HideOffer()
+    end
+    MB:RegisterEvent("LOADING_SCREEN_ENABLED", LeaveWorld)
+    MB:RegisterEvent("PLAYER_LEAVING_WORLD", LeaveWorld)
+
+    -- An offer freezes the channel it resolved to. Leaving the group it was
+    -- meant for would make the click an error, so it is withdrawn instead.
+    MB:RegisterEvent("GROUP_ROSTER_UPDATE", function()
+        if offered and (offered.chatType == "RAID" or offered.chatType == "PARTY")
+            and Announce:ResolveChannel() ~= offered.chatType then
+            HideOffer()
+        end
+    end)
 end

@@ -19,9 +19,7 @@ local MAX_STEPS = 30
 local STEP_GAP = 0.05    -- pause between two stacks: about a frame
 local VERIFY_WAIT = 0.4  -- how long the trade window gets to show a stack
 
--- Classes with their own row in the trade settings, in display order.
-Trade.CLASSES = MB.Config.CLASSES
-
+-- Never gems: only conjured food and water are ever handed over.
 local KINDS = { "water", "food" }
 
 local tradeOpen = false
@@ -34,19 +32,23 @@ local acting = false   -- inside one of the job's own protected calls
 --- from some other blocked action that merely happens during a fill.
 local function Act(fn, ...)
     acting = true
-    fn(...)
+    local ok, err = pcall(fn, ...)
     acting = false
+    -- The flag is always put back, but the error is not swallowed: it goes on
+    -- to the client's own handler as it did before.
+    if not ok then error(err, 0) end
 end
 
 -------------------------------------------------------------------------------
 -- Trade window state
 -------------------------------------------------------------------------------
 local function TradeSlotItem(slot)
-    local name, _, quantity = GetTradePlayerItemInfo(slot)
+    -- The client gives the item ID as the eighth return, so there is no need
+    -- to fetch the link and pick the ID out of it. The 0 stands for "a slot
+    -- with something in it that cannot be named".
+    local name, _, quantity, _, _, _, _, itemID = GetTradePlayerItemInfo(slot)
     if not API.Str(name) then return nil end
-    local link = API.Str(GetTradePlayerItemLink(slot))
-    local itemID = link and tonumber(link:match("item:(%d+)"))
-    return itemID or 0, API.Num(quantity, 1)
+    return API.Num(itemID, 0), API.Num(quantity, 1)
 end
 
 --- Conjured water and food already sitting in the player's side of the trade.
@@ -218,9 +220,12 @@ local function Finish(problem)
     job = nil
     if not done then return end
 
-    -- Started on counts that could not be read, and nothing went in: no
-    -- claim is made about what is or is not carried.
-    if done.unsure and not problem and done.placed.water == 0 and done.placed.food == 0 then
+    -- Started on counts that could not be read, something was wanted, and
+    -- nothing went in: no claim is made about what is or is not carried. A
+    -- job that wanted nothing placed nothing for a reason of its own, and is
+    -- reported below as usual.
+    if done.unsure and done.needed and not problem
+        and done.placed.water == 0 and done.placed.food == 0 then
         if done.manual then
             MB:Notify("Trade: your bags cannot be read just now. Try Fill Trade again in a moment.", "warn")
         end
@@ -454,6 +459,7 @@ local function StartJob(manual)
         verifyWaits = 0,
         given = {},
         unsure = not counted,
+        needed = (wantWater - water > 0) or (wantFood - food > 0),
     }
     Step()
 end

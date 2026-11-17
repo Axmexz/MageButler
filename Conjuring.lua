@@ -22,7 +22,9 @@ local MIN_LEVEL = {
 }
 
 local FALLBACK_SPELL = { water = 5504, food = 587, gem = 759 }
-local LABEL = { water = "water", food = "food" }
+-- The two kinds that are conjured in ranks, in the order they are spoken of.
+-- Gems are not here: they are counted and warned about differently.
+local KINDS = { "water", "food" }
 
 local kindOf = {}
 for _, itemID in ipairs(WATER) do kindOf[itemID] = "water" end
@@ -41,7 +43,7 @@ for i = 1, #MB.Spells.GEMS do MB:TrackItem(MB.Spells.GEMS[i].item) end
 -- spell makes the Nth item: Conjure Water Rank 4 makes Conjured Spring
 -- Water, which is drinkable from level 25.
 local itemOfSpell, rankOfSpell = {}, {}
-for _, kind in ipairs({ "water", "food" }) do
+for _, kind in ipairs(KINDS) do
     local items = (kind == "water") and WATER or FOOD
     local ranks = MB.Spells.RANKS[kind]
     for i = 1, math.min(#items, #ranks) do
@@ -110,24 +112,31 @@ end
 --- this again.
 local function Confirm()
     confirming = true
-    MB:RefreshInventory(false, "second look")
+    -- Kept apart, as the core keeps its own callers apart, so an error in the
+    -- read cannot leave the flag standing and silence the second look for the
+    -- rest of the session.
+    MB.Call(MB.RefreshInventory, MB, false, "second look")
     confirming = false
 end
 
 function Conjuring:RefreshInventory()
     ReadCounts()
 
+    -- Nothing is said, and nothing is remembered as said, while MageButler is
+    -- switched off: a shortage is still announced once it is switched back on.
+    if not MB:IsActive() then return end
+
     -- One warning at the moment a supply runs out, not on every bag update.
     local check = false
-    for kind, label in pairs(LABEL) do
+    for _, kind in ipairs(KINDS) do
         local state = self:State(kind)
         if state ~= "none" then
             lastState[kind] = state
             pending[kind] = nil
         elseif confirming then
             -- Still empty a moment later: trusted now, and said once.
-            if pending[kind] and MB:IsActive() and MB.db.conjuring.warnMissing then
-                MB:Notify("Out of conjured " .. label .. ".", "warn")
+            if pending[kind] and MB.db.conjuring.warnMissing then
+                MB:Notify("Out of conjured " .. kind .. ".", "warn")
             end
             lastState[kind] = state
             pending[kind] = nil

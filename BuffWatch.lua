@@ -36,8 +36,10 @@ local MIN_TARGET_LEVEL = {
 }
 
 -- Used for "auto" scope when the spell's own description gives no answer.
--- On WoW Forever the Arcane Brilliance tooltip reads "the target's party and
--- raid", unlike original vanilla where it reached the target's party only.
+-- On WoW Forever Arcane Brilliance is raid-wide, unlike original vanilla
+-- where it reached the target's party only (owner, 17 Nov 2026). A cast that
+-- looks as though it missed part of the raid is most likely range: a raid
+-- buff still only reaches players who are near enough to receive it.
 local DEFAULT_SCOPE = "raid"
 
 local SOLO_TOKENS = { "player" }
@@ -68,6 +70,7 @@ local state = {
 
 local records = {}        -- [unit] = that unit's record, kept and filled in again each time
 local buffNames
+local buffNamesPartial    -- only one of the two names resolved: ask again
 local autoScope
 local applied = {}
 local dirty = false
@@ -83,6 +86,13 @@ local unitButtons = {}
 --- secure buttons, so it has to be let go before combat lockdown begins.
 local function StopListDrag()
     if not (listPanel and listPanel.dragging) then return end
+    -- StopMovingOrSizing is protected on the list, so in combat the whole
+    -- thing waits: the flag stays set, and the mouse release queues the same
+    -- call again rather than slipping past the guard above.
+    if InCombatLockdown() then
+        MB:AfterCombat("buffwatch-stop-drag", StopListDrag)
+        return
+    end
     listPanel.dragging = nil
     list:StopMovingOrSizing()
     local x, y = MB.CentreOffset(list)
@@ -99,31 +109,47 @@ local function Flag(value, default)
     return value and true or false
 end
 
---- Localised names of the two buffs; every rank shares one of them.
+--- Localised names of the two buffs; every rank shares one of them. The
+--- client has no name for a spell whose data it has not loaded, which is the
+--- usual state at login for one the Mage does not know, so a list with only
+--- one of the two in it is used but not kept: it is asked for again at the
+--- next update, or Arcane Brilliance would go unrecognised all session.
 local function BuffNames()
     if buffNames then return buffNames end
     local names = {}
     local intellect, brilliance = API.SpellName(INTELLECT_ID), API.SpellName(BRILLIANCE_ID)
     if intellect then names[#names + 1] = intellect end
     if brilliance and brilliance ~= intellect then names[#names + 1] = brilliance end
-    if #names > 0 then buffNames = names end
+    if #names > 0 then
+        buffNames = names
+        buffNamesPartial = not (intellect and brilliance)
+    end
     return names
 end
 
 local rankCache = {}
 
 --- Every rank of "intellect" or "brilliance" the player knows, weakest first.
+--- The spellbook scan is the authority everywhere else in the addon, and it
+--- sees ranks `IsSpellKnown` on its own does not, so the list comes from
+--- there. Only ranks the tables above can judge are kept: an ID with no
+--- strength and no minimum level cannot be weighed against another.
 local function KnownRanks(key)
-    local list = rankCache[key]
-    if list then return list end
-    list = {}
-    local ranks = Spells.RANKS[key]
-    for i = 1, #ranks do
-        if API.IsSpellKnown(ranks[i]) then
-            list[#list + 1] = ranks[i]
-        end
+    local cached = rankCache[key]
+    if cached then return cached end
+
+    local known = Spells:KnownRanks(key)
+    local list = {}
+    for i = 1, #known do
+        if STRENGTH[known[i]] then list[#list + 1] = known[i] end
     end
-    rankCache[key] = list
+    if #list == 0 and #known > 0 then
+        -- This client names the ranks differently. An unjudged rank is
+        -- better than no buff at all, so the book's list stands as it is.
+        for i = 1, #known do list[i] = known[i] end
+    end
+    -- An empty list before the first scan is not an answer, so it is not kept.
+    if #list > 0 then rankCache[key] = list end
     return list
 end
 
@@ -383,6 +409,10 @@ local function Evaluate()
     end
 end
 
+local function ByRemaining(a, b)
+    return (a.remaining or 0) < (b.remaining or 0)
+end
+
 --- Players who need the buff, in the order they should be served: those with
 --- none first, then those carrying a weaker rank than they could have, which
 --- is short for as long as it lasts, then those whose buff is running out.
@@ -398,9 +428,7 @@ local function Needs()
             expiring[#expiring + 1] = record
         end
     end
-    table.sort(expiring, function(a, b)
-        return (a.remaining or 0) < (b.remaining or 0)
-    end)
+    table.sort(expiring, ByRemaining)
 
     local needs = {}
     if MB.db.buffwatch.missingFirst then
@@ -613,9 +641,14 @@ local function RefreshList()
         end
     end
 
+    -- The backdrop is a child of the list, which is a secure frame, so its
+    -- size is protected: in combat the new size waits for the fight to end.
     local rows = math.max(1, math.ceil(shown / LIST_COLUMNS))
-    listPanel:SetSize(LIST_COLUMNS * (CELL_WIDTH + CELL_GAP) - CELL_GAP + LIST_PAD * 2,
-        LIST_HEADER + rows * (CELL_HEIGHT + CELL_GAP) + LIST_FOOTER + LIST_PAD)
+    local width = LIST_COLUMNS * (CELL_WIDTH + CELL_GAP) - CELL_GAP + LIST_PAD * 2
+    local height = LIST_HEADER + rows * (CELL_HEIGHT + CELL_GAP) + LIST_FOOTER + LIST_PAD
+    MB:AfterCombat("buffwatch-list-size", function()
+        if listPanel then listPanel:SetSize(width, height) end
+    end)
 
     if state.active and state.total > 0 then
         listPanel.coverage:SetText(Buffed() .. "/" .. state.total .. " buffed")
@@ -635,11 +668,10 @@ function BuffWatch:RefreshVisuals()
         if watching and db.orbIndicator then
             pip.dot:SetVertexColor(Theme:StateColor(overall))
             Theme:SetPulse(pip.dot, (not state.paused) and Theme:PulseForState(overall) or nil)
-            pip:Show()
         else
             Theme:SetPulse(pip.dot, nil)   -- so a later show joins the beat afresh
-            pip:Hide()
         end
+        Theme:ShowPip(pip, watching and db.orbIndicator and true or false)
     end
 
 
@@ -745,6 +777,18 @@ function BuffWatch:Diagnostics()
         .. ", rebuff under " .. tostring(db.rebuffMinutes) .. " min.")
     MB:Print("  Intellect ranks you know: " .. (#names > 0 and table.concat(names, ", ") or "none"))
 
+    -- What Arcane Brilliance is taken to cover, and what the spell's own
+    -- description said, which is what "Automatic" goes by.
+    local described = "not read"
+    if C_Spell and C_Spell.GetSpellDescription then
+        local spellID = Spells:GetBest("brilliance") or BRILLIANCE_ID
+        local ok, text = pcall(C_Spell.GetSpellDescription, spellID)
+        if ok then text = API.Str(text) end
+        if text then described = "\"" .. text .. "\"" end
+    end
+    MB:Print("  Brilliance covers: " .. self:GetScope()
+        .. " (setting: " .. tostring(db.scope) .. "). Description: " .. described)
+
     for i = 1, #state.units do
         local record = state.units[i]
         local cast = record.cast
@@ -819,6 +863,9 @@ function BuffWatch:Update()
         return false
     end
     dirty = false
+    -- Only one of the two buff names was known last time: ask once more, in
+    -- case the client has loaded the other one since.
+    if buffNamesPartial then buffNames = nil end
     Evaluate()
     Recommend()
     ApplyAttributes()
@@ -858,6 +905,12 @@ function BuffWatch:PrepareClick()
     clicked.action = state.action
     clicked.note = state.note
     clicked.active = state.active
+end
+
+--- Drops a snapshot whose release never reached AfterClick, so no later
+--- click can report a cast that was never made.
+function BuffWatch:CancelClick()
+    clicked = nil
 end
 
 --- Called on the release of that click: says what was cast, or why nothing was.
@@ -1197,11 +1250,16 @@ function BuffWatch:OnEnable()
 
     -- Entering combat: switch the orb's buff click off while that is still allowed.
     MB:RegisterEvent("PLAYER_REGEN_DISABLED", function()
-        StopListDrag()   -- a drag still under way: drop the list while that is permitted
-        local orb = MB.RadialMenu.orb
-        orb:SetAttribute("type2", nil)
-        orb:SetAttribute("spell2", nil)
-        orb:SetAttribute("unit2", nil)
+        StopListDrag()   -- a drag still under way: dropped at the end of the fight
+        -- Lockdown is in force by the time this arrives, so the attributes
+        -- cannot be cleared here. Forgetting what was applied is enough:
+        -- Update rewrites all three as combat ends.
+        if not InCombatLockdown() then
+            local orb = MB.RadialMenu.orb
+            orb:SetAttribute("type2", nil)
+            orb:SetAttribute("spell2", nil)
+            orb:SetAttribute("unit2", nil)
+        end
         applied.orb = nil
         state.paused = true
         dirty = true
@@ -1214,6 +1272,7 @@ function BuffWatch:OnEnable()
     MB:On("SPELLS_UPDATED", function()
         autoScope = nil
         wipe(rankCache)
+        buffNames, buffNamesPartial = nil, nil
         BuffWatch:Queue()
     end)
     MB:On("INVENTORY_UPDATED", function()

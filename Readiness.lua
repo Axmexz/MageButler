@@ -163,7 +163,7 @@ local function UpdatePanel()
         local row = panel.rows[i]
         local item = items[i]
         if item then
-            row.icon:SetTexture(Theme.icons[(item.state == "ok" and "ok") or (item.state == "low" and "warn") or "bad"])
+            row.icon:SetTexture(Theme:StateIcon(item.state))
             row.label:SetText(item.label)
             row.value:SetText(item.have .. " / " .. item.want)
             row.value:SetTextColor(Theme:StateColor(item.state))
@@ -290,12 +290,11 @@ local function Update()
     if pip then
         if overall == "off" then
             Theme:SetPulse(pip.dot, nil)   -- so a later show joins the beat afresh
-            pip:Hide()
         else
             pip.dot:SetVertexColor(Theme:StateColor(overall))
             Theme:SetPulse(pip.dot, Theme:PulseForState(overall))
-            pip:Show()
         end
+        Theme:ShowPip(pip, overall ~= "off")
     end
     if panel and overall == "off" then
         panel:Hide()

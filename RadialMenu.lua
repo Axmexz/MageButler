@@ -40,9 +40,9 @@ local SUB_PAD, SUB_HEADER = 8, 30
 Radial.BINDINGS = {
     { key = "toggle", label = "Radial menu", hint = "Opens and closes the radial menu.",
       button = "MageButlerOrb", click = "LeftButton" },
-    { key = "water", label = "Conjure Water", hint = "Casts your highest rank of Conjure Water.",
+    { key = "water", label = "Conjure Water", hint = "Casts the rank of Conjure Water the button is set to.",
       button = "MageButlerButton_water", click = "LeftButton" },
-    { key = "food", label = "Conjure Food", hint = "Casts your highest rank of Conjure Food.",
+    { key = "food", label = "Conjure Food", hint = "Casts the rank of Conjure Food the button is set to.",
       button = "MageButlerButton_food", click = "LeftButton" },
     { key = "gem", label = "Conjure Gem", hint = "Conjures the strongest mana gem you are not carrying.",
       button = "MageButlerButton_gem", click = "LeftButton" },
@@ -169,9 +169,15 @@ local function CreateOrb()
     orb:SetScript("PreClick", function(_, button, down)
         -- The buff click is a plain right-click on purpose: held with Shift,
         -- Ctrl or Alt the secure button casts nothing, so nothing is expected.
-        if button == "RightButton" and down and not IsShiftKeyDown() and not IsControlKeyDown()
-            and not IsAltKeyDown() then
-            MB.BuffWatch:PrepareClick()
+        if button == "RightButton" and down then
+            if not IsShiftKeyDown() and not IsControlKeyDown() and not IsAltKeyDown() then
+                MB.BuffWatch:PrepareClick()
+            else
+                -- A press that casts nothing also clears whatever an earlier
+                -- press left behind, so no later release can report a cast
+                -- that was never made.
+                MB.BuffWatch:CancelClick()
+            end
         end
     end)
     orb:SetScript("PostClick", function(self, button, down)
@@ -204,6 +210,14 @@ end
 --- Ends an orb drag and stores the position as an offset from screen centre.
 function Radial:StopDrag()
     if not orb.dragging then return end
+    -- StopMovingOrSizing is protected on the orb, so in combat the whole
+    -- thing waits. The drag flag stays set meanwhile, so the mouse release
+    -- queues the same call again under the same key rather than slipping
+    -- past the guard above and leaving the orb stuck to the cursor.
+    if InCombatLockdown() then
+        MB:AfterCombat("orb-stop-drag", function() Radial:StopDrag() end)
+        return
+    end
     orb.dragging = nil
     orb:StopMovingOrSizing()
 
@@ -482,15 +496,18 @@ ButtonTooltip = function(button)
         local have = Conjuring:Count(key)
         -- The count is of the strongest rank carried and of that alone, so it
         -- says which rank that is: a bare number next to a button set to
-        -- conjure another rank reads as a contradiction.
+        -- conjure another rank reads as a contradiction. Manna biscuits are
+        -- the exception, since they count as both food and water: with those
+        -- in the total it names no rank and itemises everything below.
         local counted = Conjuring:BestItem(key)
         local countedRank = counted and Conjuring:RankOfItem(counted)
+        local mixed = counted and MB:CountOf(counted) ~= have
         GameTooltip:AddLine(" ")
         if not MB.inventoryKnown then
             Theme:TipLine(GameTooltip, "In bags: not counted yet", "dim")
         else
             local line = "In bags"
-            if countedRank then line = line .. "  Rank " .. countedRank end
+            if countedRank and not mixed then line = line .. "  Rank " .. countedRank end
             line = line .. ": " .. have
             if target > 0 then line = line .. " / " .. target end
             Theme:TipLine(GameTooltip, line, "text")
@@ -499,7 +516,7 @@ ButtonTooltip = function(button)
             local carried = Conjuring:RanksCarried(key)
             for i = #carried, 1, -1 do
                 local entry = carried[i]
-                if entry.item ~= counted then
+                if mixed or entry.item ~= counted then
                     local name = entry.rank and ("Rank " .. entry.rank) or (API.ItemName(entry.item) or "Other")
                     Theme:TipLine(GameTooltip, "  " .. name .. ": " .. entry.count
                         .. "  (level " .. entry.level .. ")", "dim")
@@ -645,6 +662,9 @@ function Radial:RefreshVisuals()
     SetCount(trade, nil)
 end
 
+-- Every modifier combination that includes Shift, as the client spells them.
+local SHIFT_PREFIXES = { "shift-", "ctrl-shift-", "alt-shift-", "alt-ctrl-shift-" }
+
 --- Secure attributes for the conjure buttons. Out of combat only.
 --- The "*" prefix makes each one apply whatever modifier keys are held; a
 --- plain "type1" would be skipped by a keybind such as ALT-W, because the
@@ -661,10 +681,14 @@ local function RefreshAttributes()
     food:SetAttribute("*type1", foodSpell and "spell" or nil)
     food:SetAttribute("*spell1", foodSpell)
     -- A plain right-click steps down a rank, which casts nothing, so Ritual
-    -- of Refreshment is the one with Shift held. Named for that modifier
-    -- alone: the client looks at "shift-type2" before the "*" wildcard.
-    food:SetAttribute("shift-type2", ritual and "spell" or nil)
-    food:SetAttribute("shift-spell2", ritual)
+    -- of Refreshment is the one with Shift held. The "*" wildcard cannot be
+    -- used here, since it would catch the unmodified right-click too, so
+    -- every prefix holding Shift is named: the client builds them in the
+    -- order shift, ctrl, alt and looks for that exact string.
+    for _, prefix in ipairs(SHIFT_PREFIXES) do
+        food:SetAttribute(prefix .. "type2", ritual and "spell" or nil)
+        food:SetAttribute(prefix .. "spell2", ritual)
+    end
     food:SetAttribute("*type2", nil)
     food:SetAttribute("*spell2", nil)
 
@@ -844,8 +868,9 @@ function Radial:RefreshGlow()
     local attention = MB.db.general.enabled and (buffsNeed or supplies == "low" or supplies == "none")
 
     -- The halo takes the colour of the worst thing that needs seeing to,
-    -- yellow for running low and red for missing, and breathes: slowly for a
-    -- warning, quicker when something is missing.
+    -- yellow for running low and red for missing, and breathes on the shared
+    -- beat. The speed is the same for both: every status animation keeps one
+    -- beat, so the mode only says whether to move at all.
     if attention and MB.db.appearance.glow then
         local worst = (buffs == "none" or supplies == "none") and "none" or "low"
         orb.halo:SetVertexColor(Theme:StateColor(worst))
@@ -1001,7 +1026,8 @@ function Radial:OnEnable()
         MB:AfterCombat("radial-attributes", RefreshAttributes)
     end)
 
-    -- Entering combat mid-drag: drop the orb while that is still permitted.
+    -- Entering combat mid-drag: ask for the orb to be dropped. Lockdown is
+    -- already in force by now, so StopDrag queues it for the end of the fight.
     MB:RegisterEvent("PLAYER_REGEN_DISABLED", function()
         Radial:StopDrag()
     end)

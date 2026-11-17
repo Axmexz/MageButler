@@ -64,6 +64,13 @@ function Theme:StateColor(state)
     return self:Color("off")
 end
 
+--- Icon for an inventory state: "ok", "low", "none" or "off".
+function Theme:StateIcon(state)
+    if state == "ok" then return self.icons.ok end
+    if state == "low" then return self.icons.warn end
+    return self.icons.bad
+end
+
 function Theme:Hex(r, g, b)
     return string.format("|cff%02x%02x%02x", math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
 end
@@ -219,17 +226,32 @@ function Theme:CreatePip(orb, point, x, y)
     pip.dot:SetPoint("TOPLEFT", 3, -3)
     pip.dot:SetPoint("BOTTOMRIGHT", -3, 3)
     pips[#pips + 1] = pip
+    pip.combatKey = "pip" .. #pips
     return pip
+end
+
+--- Shows or hides a status light. The pips are children of the orb, which is
+--- a secure button, so their own Show and Hide are protected: in combat the
+--- change is queued and made the moment the fight ends.
+function Theme:ShowPip(pip, shown)
+    if InCombatLockdown() then
+        MB:AfterCombat(pip.combatKey, function() pip:SetShown(shown) end)
+        return
+    end
+    if pip:IsShown() ~= shown then pip:SetShown(shown) end
 end
 
 --- Whether the status lights take the mouse. They sit on the orb's rim and
 --- are easy to hit by accident; switched off, a click on one goes through to
---- the orb underneath, and so does the tooltip.
+--- the orb underneath, and so does the tooltip. EnableMouse is protected on
+--- the orb's children, so this waits for the end of a fight as well.
 function Theme:RefreshPips()
-    local clickable = not MB.db or MB.db.appearance.pipClicks ~= false
-    for i = 1, #pips do
-        pips[i]:EnableMouse(clickable)
-    end
+    MB:AfterCombat("theme-pips", function()
+        local clickable = not MB.db or MB.db.appearance.pipClicks ~= false
+        for i = 1, #pips do
+            pips[i]:EnableMouse(clickable)
+        end
+    end)
 end
 
 --- A themed text button for panels.
@@ -492,9 +514,17 @@ function Theme:SetBreath(region, mode, hide)
             -- decides what happens when the beat ends.
             region.mbBreathMode = nil
             Halt(group, function()
-                if hide then FadeAway(region) else region:SetAlpha(0.7) end
+                if hide then
+                    FadeAway(region)
+                else
+                    if region.mbFade then region.mbFade:Stop() end
+                    region:SetAlpha(0.7)
+                end
             end)
         elseif not hide then
+            -- A fade from an earlier "stop" would carry on to invisible and
+            -- hide the halo, though it is wanted lit.
+            if region.mbFade then region.mbFade:Stop() end
             region:SetAlpha(0.7)
         elseif not (region.mbFade and region.mbFade:IsPlaying()) then
             region:Hide()   -- unless it is fading away already, which ends hidden
@@ -597,7 +627,9 @@ function Theme:Flash(region, ring, restore)
     if MB.db and not MB.db.radial.animations then return end
 
     -- A flash already running hands its ring back before this one takes over.
-    if region.mbFlashRestore then region.mbFlashRestore() end
+    local pending = region.mbFlashRestore
+    region.mbFlashRestore = nil
+    if pending then pending() end
 
     local group = region.mbFlash
     if not group then
@@ -614,8 +646,12 @@ function Theme:Flash(region, ring, restore)
         down:SetSmoothing("OUT")
         down:SetOrder(2)
         group:SetScript("OnFinished", function()
+            -- Taken before it is called, so a later flash cannot hand the
+            -- same ring back a second time.
+            local done = region.mbFlashRestore
+            region.mbFlashRestore = nil
             region:SetAlpha(0)
-            if region.mbFlashRestore then region.mbFlashRestore() end
+            if done then done() end
         end)
         region.mbFlash = group
     end

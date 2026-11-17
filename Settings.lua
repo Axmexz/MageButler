@@ -11,12 +11,9 @@ local TITLE = 38
 local COLUMN = 215 -- horizontal distance between option columns
 local PAGE_WIDTH = WIDTH - SIDEBAR - 54 -- usable width of a settings page
 
--- MageButler's own face, drawn whole wherever it stands for the addon.
-local LOGO = MB.MEDIA .. "Icon.tga"
-
 local SECTIONS = {
     { key = "general", label = "General", icon = "Interface\\Icons\\Trade_Engineering" },
-    { key = "radial", label = "Radial Menu", icon = LOGO, ours = true },
+    { key = "radial", label = "Radial Menu", icon = "Interface\\Icons\\Spell_Holy_MagicalSentry" },
     { key = "buffwatch", label = "Buff Watch", icon = "Interface\\Icons\\Spell_Holy_ArcaneIntellect" },
     { key = "reagents", label = "Reagents", icon = "Interface\\Icons\\INV_Misc_Rune_06" },
     { key = "conjuring", label = "Conjuring", icon = "Interface\\Icons\\INV_Drink_07" },
@@ -896,13 +893,7 @@ local function CreateNavButton(sidebar, index, section)
     button.icon:SetSize(20, 20)
     button.icon:SetPoint("LEFT", 9, 0)
     button.icon:SetTexture(section.icon)
-    -- Blizzard's icons carry a border that is cropped away; our own artwork
-    -- is drawn whole.
-    if section.ours then
-        button.icon:SetTexCoord(0, 1, 0, 1)
-    else
-        button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    end
+    button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
     button.label = Theme:Text(button, 12)
     button.label:SetPoint("LEFT", button.icon, "RIGHT", 9, 0)
@@ -940,7 +931,8 @@ local function CreateFrameOnce()
     local icon = frame:CreateTexture(nil, "ARTWORK")
     icon:SetSize(22, 22)
     icon:SetPoint("TOPLEFT", 12, -9)
-    icon:SetTexture(LOGO)
+    icon:SetTexture("Interface\\Icons\\Spell_Holy_MagicalSentry")
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
     local title = Theme:Text(frame, 14)
     title:SetPoint("LEFT", icon, "RIGHT", 9, 0)
@@ -1058,7 +1050,8 @@ local function CreateWelcome()
     local icon = welcome:CreateTexture(nil, "ARTWORK")
     icon:SetSize(26, 26)
     icon:SetPoint("TOPLEFT", 16, -14)
-    icon:SetTexture(LOGO)
+    icon:SetTexture("Interface\\Icons\\Spell_Holy_MagicalSentry")
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
     local title = Theme:Text(welcome, 15)
     title:SetPoint("LEFT", icon, "RIGHT", 10, 0)
@@ -1083,6 +1076,7 @@ local function CreateWelcome()
         accent .. "Left-click|r  the radial menu\n" ..
         accent .. "Right-click|r  cast the buff your group needs\n" ..
         accent .. "Shift + right-click|r  these settings\n" ..
+        accent .. "Right-click water or food|r  an older rank, for lower-level players\n" ..
         accent .. "Shift as a trade opens|r  no water or food is given")
 
     local closing = Theme:Text(welcome, 11)

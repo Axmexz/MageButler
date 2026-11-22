@@ -645,7 +645,9 @@ builders.reagents = function(page)
             -- doing nothing on a Mage who is not high enough yet.
             local name = Reagents:Name(key)
             local reason = Reagents:InactiveReason(key)
-            if reason == "level" then
+            if reason == "talent" then
+                name = name .. "  |cff8f9fc9(not needed)|r"
+            elseif reason == "level" then
                 name = name .. "  |cff8f9fc9(lvl " .. Reagents:MinLevel(key) .. ")|r"
             elseif reason == "spell" then
                 name = name .. "  |cff8f9fc9(unlearned)|r"

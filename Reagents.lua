@@ -53,12 +53,18 @@ function Reagents:PlayerLevel()
     return API.Num(UnitLevel("player"), 1) or 1
 end
 
---- Why a reagent is being left alone: "off" when switched off, "level" when
---- the Mage is too low for the spell that uses it, "spell" when they are high
+--- Why a reagent is being left alone: "off" when switched off, "talent" when
+--- the player's talents have lifted vendor reagent costs, "level" when the
+--- Mage is too low for the spell that uses it, "spell" when they are high
 --- enough but have not learned it yet. nil means it is being tracked.
+---
+--- The player's own switch is read first, so turning a reagent off is always
+--- obeyed. "talent" comes next because it outranks the other two: a reagent
+--- that is not needed at all is not worth explaining by level or spellbook.
 function Reagents:InactiveReason(key)
     local config = MB.db.reagents.items[key]
     if config == nil or not config.enabled then return "off" end
+    if MB.Spells:ReagentsWaived() then return "talent" end
     if self:PlayerLevel() < self:MinLevel(key) then return "level" end
     if not MB.Spells:UsesReagent(key) then return "spell" end
     return nil

@@ -835,11 +835,12 @@ function BuffWatch:Diagnostics()
     end
 
     -- The Legacy Tree talent that lifts vendor reagent costs. Printed whether
-    -- or not Brilliance is known, since it covers the runes too. Nothing acts
-    -- on it yet: it is here so a reading from a Mage who has the talent can be
-    -- compared against one who has not.
+    -- or not Brilliance is known, since it covers the runes too. This is the
+    -- line to ask for if a reagent has stopped being counted unexpectedly.
     MB:Print("  Reagent Economy talent: "
-        .. (Spells:ReagentsWaived() and "active (vendor reagents waived)" or "not detected"))
+        .. (Spells:ReagentsWaived()
+            and "active - Arcane Powder and both runes are not being tracked"
+            or "not detected, so reagents are tracked as usual"))
 
     for i = 1, #state.units do
         local record = state.units[i]

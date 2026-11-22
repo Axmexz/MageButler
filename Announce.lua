@@ -345,7 +345,9 @@ function Announce:OnTravelClick(spellID)
     -- Not for a cast that plainly cannot start, nor twice for one cast.
     local now = GetTime()
     if startedSpell == spellID and now - startedTime < START_GUARD then return end
-    if MB.inventoryKnown and MB.Reagents:Count(entry.kind == "portal" and "runeP" or "runeT") <= 0 then return end
+    local reagent = entry.kind == "portal" and "runeP" or "runeT"
+    local needsRune = MB.Reagents:InactiveReason(reagent) ~= "talent"
+    if needsRune and MB.inventoryKnown and MB.Reagents:Count(reagent) <= 0 then return end
     if C_Spell and C_Spell.IsSpellUsable then
         local ok, usable = pcall(C_Spell.IsSpellUsable, spellID)
         if ok and not MB.IsSecret(usable) and usable == false then return end

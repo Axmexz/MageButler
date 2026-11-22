@@ -338,6 +338,11 @@ local function SetButtonState(button, available, selected)
     button.label:SetTextColor(r, g, b)
 end
 
+-- U+221E, written as its UTF-8 bytes so the source stays ASCII. Shown in
+-- place of a rune count when a talent has lifted the cost: the supply is
+-- no longer a number, so a number would be the wrong thing to show.
+local INFINITY = "\226\136\158"
+
 local function SetCount(button, value, state)
     if value and MB.db.radial.showCounts then
         button.count:SetText(value)
@@ -559,7 +564,11 @@ ButtonTooltip = function(button)
             Theme:TipLine(GameTooltip, "None learned yet.", "bad")
         else
             Theme:TipLine(GameTooltip, #list .. (#list == 1 and " destination" or " destinations"), "text")
-            if MB.inventoryKnown then
+            if Reagents:InactiveReason(reagent) == "talent" then
+                local cr, cg, cb = Theme:StateColor("ok")
+                GameTooltip:AddLine(Reagents:Name(reagent) .. ": " .. INFINITY, cr, cg, cb)
+                Theme:TipLine(GameTooltip, "Your talents have lifted the cost.", "dim")
+            elseif MB.inventoryKnown then
                 local cr, cg, cb = Theme:StateColor(Reagents:Count(reagent) > 0 and "ok" or "none")
                 GameTooltip:AddLine(Reagents:Name(reagent) .. ": " .. Reagents:Count(reagent), cr, cg, cb)
             else
@@ -634,18 +643,21 @@ function Radial:RefreshVisuals()
         button.icon:SetTexture((list[1] and list[1].icon) or FALLBACK_ICON[key])
         SetButtonState(button, #list > 0, sub:IsShown())
 
+        -- With the cost lifted there is no number to show and nothing can
+        -- run short, so the badge carries the symbol and the list stays lit.
+        local free = Reagents:InactiveReason(reagent) == "talent"
         local have = Reagents:Count(reagent)
-        local state = have > 0 and "ok" or "none"
-        if #list > 0 and known then
-            SetCount(button, have, state)
-            sub.reagent:SetText(Reagents.SHORT[reagent] .. "  " .. have)
+        local state = (free or have > 0) and "ok" or "none"
+        if #list > 0 and (known or free) then
+            SetCount(button, free and INFINITY or have, state)
+            sub.reagent:SetText(Reagents.SHORT[reagent] .. "  " .. (free and INFINITY or have))
             sub.reagent:SetTextColor(Theme:StateColor(state))
         else
             SetCount(button, nil)
             sub.reagent:SetText("")
         end
         -- A destination cannot be cast without its rune: dim the list.
-        local short = known and have <= 0
+        local short = known and not free and have <= 0
         for i = 1, #sub.rows do
             local row = sub.rows[i]
             row.icon:SetDesaturated(short)

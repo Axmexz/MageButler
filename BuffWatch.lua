@@ -457,6 +457,18 @@ local function Gains(record, brilliance)
     return true
 end
 
+--- Whether the client says a spell can be cast right now. Asked rather than
+--- assumed, because a talent can lift a reagent requirement: with no Arcane
+--- Powder left, a Brilliance the client still calls usable plainly needs
+--- none. Anything it will not say is taken as "no", so the reagent rule
+--- below stands unless the game itself contradicts it.
+local function UsableNow(spellID)
+    if not (C_Spell and C_Spell.IsSpellUsable) then return false end
+    local ok, usable = pcall(C_Spell.IsSpellUsable, spellID)
+    if not ok or IsSecret(usable) then return false end
+    return usable == true
+end
+
 --- Picks the one spell a right-click should cast, or explains why none.
 local function Recommend()
     state.action, state.note = nil, nil
@@ -512,8 +524,11 @@ local function Recommend()
         end
 
         if worthIt and target then
-            -- A count that has not been read yet is unknown, not zero.
-            if not MB.inventoryKnown or Reagents:Count("powder") > 0 then
+            -- A count that has not been read yet is unknown, not zero. With
+            -- none left the client gets the last word: a talent can lift the
+            -- reagent, and then an empty powder bag stops nothing.
+            if not MB.inventoryKnown or Reagents:Count("powder") > 0
+                or UsableNow(brilliance) then
                 state.action = {
                     kind = "brilliance", spell = brilliance, unit = target,
                     benefit = benefit, waiting = #needs,
@@ -798,6 +813,26 @@ function BuffWatch:Diagnostics()
     end
     MB:Print("  Brilliance covers: " .. self:GetScope()
         .. " (setting: " .. tostring(db.scope) .. "). Description: " .. described)
+
+    -- Whether Arcane Brilliance really costs a reagent on this client. A
+    -- talent can lift it, and then the powder in the bags is beside the
+    -- point. "casts left" is the client's own count of how many casts the
+    -- reagents allow: with powder carried, a count matching it means the
+    -- reagent is required, and 0 means it is not.
+    local brilliance = Spells:GetBest("brilliance")
+    if brilliance then
+        local casts, usable = "not read", "not read"
+        if C_Spell and C_Spell.GetSpellCastCount then
+            local ok, n = pcall(C_Spell.GetSpellCastCount, brilliance)
+            if ok then casts = tostring(API.Num(n) or "withheld") end
+        end
+        if C_Spell and C_Spell.IsSpellUsable then
+            local ok, can = pcall(C_Spell.IsSpellUsable, brilliance)
+            if ok and not IsSecret(can) then usable = can and "yes" or "no" end
+        end
+        MB:Print("  Brilliance reagent: Arcane Powder " .. Reagents:Count("powder")
+            .. " carried, casts left " .. casts .. ", usable now " .. usable)
+    end
 
     for i = 1, #state.units do
         local record = state.units[i]

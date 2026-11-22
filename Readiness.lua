@@ -178,7 +178,7 @@ end
 local function CreatePanel()
     panel = Theme:CreatePanel("MageButlerReadiness", UIParent, "bg")
     panel:SetFrameStrata("HIGH")
-    panel:SetSize(210, 120)
+    panel:SetSize(240, 120)
     panel:SetClampedToScreen(true)
     panel:EnableMouse(true)
     panel:Hide()
@@ -194,18 +194,25 @@ local function CreatePanel()
     panel.rows = {}
     for i = 1, MAX_ROWS do
         local row = CreateFrame("Frame", nil, panel)
-        row:SetSize(186, ROW_HEIGHT)
+        row:SetSize(216, ROW_HEIGHT)
         row:SetPoint("TOPLEFT", 12, -(PANEL_TOP + (i - 1) * ROW_HEIGHT))
 
         row.icon = row:CreateTexture(nil, "ARTWORK")
         row.icon:SetSize(14, 14)
         row.icon:SetPoint("LEFT", 0, 0)
 
-        row.label = Theme:Text(row, 11)
-        row.label:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
-
         row.value = Theme:Text(row, 11)
         row.value:SetPoint("RIGHT", 0, 0)
+
+        -- The label is capped against the count rather than left to grow:
+        -- "Rune of Teleportation" is wider than the room the old 210-wide
+        -- panel left it and ran straight under the numbers. The cap is the
+        -- guarantee; the panel being 240 wide is what lets it read in full.
+        row.label = Theme:Text(row, 11)
+        row.label:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+        row.label:SetPoint("RIGHT", row.value, "LEFT", -8, 0)
+        row.label:SetJustifyH("LEFT")
+        row.label:SetWordWrap(false)
 
         panel.rows[i] = row
     end

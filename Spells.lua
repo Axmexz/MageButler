@@ -295,6 +295,35 @@ function Spells:KnowsAnyGem()
     return false
 end
 
+
+-- The Legacy Tree's "Reagent Economy" node: "Your class abilities no longer
+-- require reagents purchaseable from vendors", which is every reagent this
+-- addon tracks - Rune of Teleportation, Rune of Portals and Arcane Powder
+-- are all bought from a vendor.
+--
+-- The tree and the node are the game's own global IDs and are the same for
+-- everyone. The config is allocated per character (1065279 on one Mage,
+-- whose class config was 1065266), so it cannot be known in advance and is
+-- looked up from the tree each time. Read cold after a /reload with the
+-- Legacy window never opened, so it does not depend on that UI.
+local LEGACY_TREE, REAGENT_ECONOMY = 1189, 110309
+
+--- Whether the player's talents have lifted the cost of vendor reagents.
+---
+--- Only a definite "yes" counts. A missing API, a refused call, a secret or
+--- anything that is not a number leaves this false, so a read that fails can
+--- only ever leave the addon counting reagents as it does today. It can
+--- never be the reason a restock is skipped.
+function Spells:ReagentsWaived()
+    local traits = C_Traits
+    if not (traits and traits.GetConfigIDByTreeID and traits.GetNodeInfo) then return false end
+    local ok, config = pcall(traits.GetConfigIDByTreeID, LEGACY_TREE)
+    if not ok or MB.IsSecret(config) or type(config) ~= "number" then return false end
+    local got, info = pcall(traits.GetNodeInfo, config, REAGENT_ECONOMY)
+    if not got or type(info) ~= "table" then return false end
+    return (API.Num(info.ranksPurchased, 0) or 0) > 0
+end
+
 --- Whether the player has any spell that consumes the given reagent.
 function Spells:UsesReagent(key)
     if key == "runeT" then return #teleports > 0 end

@@ -834,6 +834,13 @@ function BuffWatch:Diagnostics()
             .. " carried, casts left " .. casts .. ", usable now " .. usable)
     end
 
+    -- The Legacy Tree talent that lifts vendor reagent costs. Printed whether
+    -- or not Brilliance is known, since it covers the runes too. Nothing acts
+    -- on it yet: it is here so a reading from a Mage who has the talent can be
+    -- compared against one who has not.
+    MB:Print("  Reagent Economy talent: "
+        .. (Spells:ReagentsWaived() and "active (vendor reagents waived)" or "not detected"))
+
     for i = 1, #state.units do
         local record = state.units[i]
         local cast = record.cast

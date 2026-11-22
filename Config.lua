@@ -48,8 +48,8 @@ Config.defaults = {
         },
     },
     conjuring = {
-        waterTarget = 40,
-        foodTarget = 20,
+        waterTarget = 20,
+        foodTarget = 10,
         wantGem = true,
         warnMissing = true,
     },
@@ -99,7 +99,7 @@ Config.defaults = {
         tooltipNames = true,
         notify = "toast",        -- "toast", "chat" or "off"
         partyThreshold = 3,
-        raidThreshold = 6,
+        raidThreshold = 3,
         preferBrilliance = true,
         fallbackIntellect = true,
         upgradeWeaker = true,    -- a weaker rank than the Mage could give counts as needing a rebuff
@@ -111,7 +111,7 @@ Config.defaults = {
         ignoreDead = true,
         skipUnavailable = true,
         missingFirst = true,
-        manaUsersOnly = false,
+        manaUsersOnly = true,     -- Intellect does nothing for a Warrior or a Rogue
     },
     readiness = {
         enabled = true,
@@ -264,6 +264,13 @@ end
 ---     not carried over: a profile cannot say whether it held the old default
 ---     or a choice, and the old default is what let a weaker rank from another
 ---     Mage pass as everyone being buffed.
+---   * One announcement channel became two, for dungeons and for the open
+---     world. A channel already chosen is kept for both.
+---
+--- Those are safe to run on every login because the keys they clear are
+--- written by nothing: once gone they stay gone. A setting that is still
+--- live and has merely changed its default is a different matter, and is
+--- handled by `Remaster` below.
 local function DropRetired(profile)
     profile.hud = nil
     if type(profile.general) == "table" then
@@ -275,14 +282,57 @@ local function DropRetired(profile)
     if type(profile.buffwatch) == "table" then
         profile.buffwatch.acceptLowerRanks = nil
     end
-    -- One announcement channel became two, for dungeons and for the open
-    -- world. A channel already chosen is kept for both.
     local announce = profile.announce
     if type(announce) == "table" and type(announce.channel) == "string" then
         if type(announce.channelInstance) ~= "string" then announce.channelInstance = announce.channel end
         if type(announce.channelWorld) ~= "string" then announce.channelWorld = announce.channel end
         announce.channel = nil
     end
+end
+
+--- Settings whose default changed, applied once to a profile that predates
+--- the change.
+---
+--- `ApplyDefaults` writes every default into the saved profile the first
+--- time it is loaded, so a new default never reaches a character that
+--- already exists: it has to be cleared here first. But this runs on every
+--- login, and these keys are live settings the player can set themselves,
+--- so an unguarded clear would be a standing rule rather than a migration -
+--- "Mana users only" could never be switched off again. `profile.schema` is
+--- what makes it happen once.
+---
+--- The numbers are cleared only where the profile still holds the old
+--- default exactly, so a figure the player chose is left alone. A boolean
+--- cannot say whether it holds a choice or the old default, so it is
+--- cleared outright, as "Accept lower ranks" was.
+local SCHEMA = 2
+
+local function Remaster(profile)
+    if profile.schema == SCHEMA then return end
+    local before = profile.schema or 1
+
+    if before < 2 then
+        -- Arcane Brilliance is raid-wide on this client, so one cast serves
+        -- the whole raid: waiting for six players to need Intellect meant
+        -- buffing a raid one at a time most of the time. Three now.
+        -- Watching Warriors and Rogues only ever reported them as unbuffed.
+        if type(profile.buffwatch) == "table" then
+            if profile.buffwatch.raidThreshold == 6 then
+                profile.buffwatch.raidThreshold = nil
+            end
+            if profile.buffwatch.manaUsersOnly == false then
+                profile.buffwatch.manaUsersOnly = nil
+            end
+        end
+        -- Forty water and twenty food is more than a run asks for and left
+        -- the preparation check calling stocks short that were plainly fine.
+        if type(profile.conjuring) == "table" then
+            if profile.conjuring.waterTarget == 40 then profile.conjuring.waterTarget = nil end
+            if profile.conjuring.foodTarget == 20 then profile.conjuring.foodTarget = nil end
+        end
+    end
+
+    profile.schema = SCHEMA
 end
 
 function Config:Init()
@@ -303,6 +353,7 @@ function Config:Init()
     end
     MigrateTrade(root.chars[self.key])
     DropRetired(root.chars[self.key])
+    Remaster(root.chars[self.key])
     MB.db = Sanitise(ApplyDefaults(root.chars[self.key], self.defaults), self.defaults)
 end
 
@@ -329,6 +380,7 @@ function Config:CopyFrom(key)
     local copy = DeepCopy(source)
     MigrateTrade(copy)
     DropRetired(copy)
+    Remaster(copy)
     self.root.chars[self.key] = copy
     MB.db = Sanitise(ApplyDefaults(copy, self.defaults), self.defaults)
     MB:Fire("SETTINGS_CHANGED", "all")

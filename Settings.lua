@@ -567,7 +567,7 @@ builders.buffwatch = function(page)
         Field("buffwatch", watch, "partyThreshold"))
     Label(page, RIGHT, -138, "Raid threshold", 12, nil, 124)
     NumberBox(page, RIGHT + 130, -134, 44, "Raid threshold",
-        "In a raid, use Arcane Brilliance once this many players across the whole raid need Intellect.", 1, 40,
+        "In a raid, use Arcane Brilliance once this many players need Intellect. Below that, players are buffed one at a time.", 1, 40,
         Field("buffwatch", watch, "raidThreshold"))
     Checkbox(page, 0, -162, "Prefer Arcane Brilliance", "Use Arcane Brilliance when the threshold is reached, it is learned and you carry Arcane Powder.",
         Field("buffwatch", watch, "preferBrilliance"))
@@ -597,7 +597,7 @@ builders.buffwatch = function(page)
         Field("buffwatch", watch, "skipUnavailable"))
     Checkbox(page, RIGHT, -316, "Missing before expiring", "Buff players with no Intellect at all before refreshing buffs that are running out.",
         Field("buffwatch", watch, "missingFirst"))
-    Checkbox(page, 0, -340, "Mana users only", "Leave Warriors and Rogues out of the count.", Field("buffwatch", watch, "manaUsersOnly"))
+    Checkbox(page, 0, -340, "Mana users only", "Leave Warriors and Rogues out of the count: Intellect does nothing for a class with no mana.", Field("buffwatch", watch, "manaUsersOnly"))
 
     Header(page, -370, "Display")
     Checkbox(page, 0, -398, "Orb warning colours", "Tints the orb's ring yellow or red while buffs need attention.",

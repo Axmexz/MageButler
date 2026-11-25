@@ -139,6 +139,7 @@ Config.defaults = {
     },
     appearance = {
         accent = "arcane",
+        strata = "MEDIUM",     -- which layer of the interface the addon draws on
         panelAlpha = 0.92,
         pipClicks = true,          -- the two status lights on the orb take clicks
         glow = true,

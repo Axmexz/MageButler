@@ -519,7 +519,7 @@ local function UpdateFillButton()
         if not (tradeOpen and TradeFrame) then return end
         fillButton = MB.Theme:CreateButton(TradeFrame, "Fill Trade", 92, 22)
         fillButton:SetPoint("BOTTOMLEFT", TradeFrame, "TOPLEFT", 8, 2)
-        fillButton:SetFrameStrata("HIGH")
+        MB.Theme:UseStrata(fillButton, 1)
         fillButton:SetScript("OnClick", function()
             Trade:Fill(true)
         end)

@@ -177,7 +177,7 @@ end
 
 local function CreatePanel()
     panel = Theme:CreatePanel("MageButlerReadiness", UIParent, "bg")
-    panel:SetFrameStrata("HIGH")
+    Theme:UseStrata(panel, 1)
     panel:SetSize(240, 120)
     panel:SetClampedToScreen(true)
     panel:EnableMouse(true)

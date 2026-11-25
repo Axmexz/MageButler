@@ -79,6 +79,60 @@ function Theme:AccentHex()
     return self:Hex(self:Accent())
 end
 
+-------------------------------------------------------------------------------
+-- Frame strata
+--
+-- Which layer of the interface MageButler draws on. One setting moves the
+-- whole addon together: a frame is registered at a fixed number of steps
+-- above the strata the player chose, so the orb sits at the base, the panels
+-- and the toast one above it and the settings window two, whatever that base
+-- is. Choosing a single strata for everything would put a submenu behind the
+-- menu it belongs to.
+--
+-- At the top of the list the offsets have nowhere left to go and collapse to
+-- the same strata. Nothing is lost by that: the frames that share one are
+-- parented to each other, so frame level still orders them.
+-------------------------------------------------------------------------------
+Theme.STRATA = {
+    "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG",
+    "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP",
+}
+
+local STRATA_DEFAULT = "MEDIUM"
+local STRATA_INDEX = {}
+for i = 1, #Theme.STRATA do STRATA_INDEX[Theme.STRATA[i]] = i end
+
+local strataUsers = {}
+
+--- The strata `offset` steps above the player's choice, clamped to the list.
+function Theme:Strata(offset)
+    local chosen = MB.db and MB.db.appearance.strata or STRATA_DEFAULT
+    local base = STRATA_INDEX[chosen] or STRATA_INDEX[STRATA_DEFAULT]
+    local index = base + (offset or 0)
+    if index < 1 then index = 1 end
+    if index > #self.STRATA then index = #self.STRATA end
+    return self.STRATA[index]
+end
+
+--- Re-seats every registered frame. `SetFrameStrata` is protected, and most
+--- of these frames are the orb's own children, so the whole pass is queued
+--- rather than refused one call at a time.
+function Theme:RefreshStrata()
+    MB:AfterCombat("theme-strata", function()
+        for i = 1, #strataUsers do
+            local user = strataUsers[i]
+            user[1]:SetFrameStrata(Theme:Strata(user[2]))
+        end
+    end)
+end
+
+--- Keeps `frame` `offset` steps above the chosen strata, including after the
+--- player changes it.
+function Theme:UseStrata(frame, offset)
+    strataUsers[#strataUsers + 1] = { frame, offset or 0 }
+    self:RefreshStrata()
+end
+
 --- Keeps `object` tinted with the accent colour, including after it changes.
 function Theme:UseAccent(object, method, alpha)
     alpha = alpha or 1
@@ -99,6 +153,7 @@ function Theme:Refresh()
         local cr, cg, cb = self:Color(panel.mbColor)
         panel:SetBackdropColor(cr, cg, cb, panel.mbSolid and 1 or alpha)
     end
+    self:RefreshStrata()
 end
 
 -------------------------------------------------------------------------------
@@ -676,7 +731,7 @@ local KIND_RANK = { ok = 1, info = 1, warn = 2, bad = 3 }
 
 local function CreateToast()
     local toast = Theme:CreatePanel("MageButlerToast", UIParent, "bg")
-    toast:SetFrameStrata("HIGH")
+    Theme:UseStrata(toast, 1)
     toast:SetPoint("TOP", UIParent, "TOP", 0, -170)
     toast:SetSize(260, 34)
     toast:EnableMouse(false)

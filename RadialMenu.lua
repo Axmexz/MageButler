@@ -90,7 +90,7 @@ local function CreateOrb()
     -- also run restricted snippets (the left-click opens the menu in combat).
     orb = CreateFrame("Button", "MageButlerOrb", UIParent, "SecureActionButtonTemplate,SecureHandlerBaseTemplate")
     orb:SetSize(ORB_SIZE, ORB_SIZE)
-    orb:SetFrameStrata("MEDIUM")
+    Theme:UseStrata(orb, 0)
     orb:SetClampedToScreen(true)
     orb:SetMovable(true)
     orb:RegisterForClicks("AnyUp", "AnyDown")
@@ -246,7 +246,7 @@ end
 -------------------------------------------------------------------------------
 local function CreateMenu()
     menu = CreateFrame("Frame", "MageButlerMenu", UIParent, "SecureHandlerBaseTemplate")
-    menu:SetFrameStrata("MEDIUM")
+    Theme:UseStrata(menu, 0)
     menu:SetPoint("CENTER", orb, "CENTER")
     menu:SetSize(200, 200)
     menu:Hide()
@@ -413,7 +413,7 @@ local function CreateSub(key)
     local sub = CreateFrame("Frame", "MageButlerSub_" .. key, menu, "SecureHandlerBaseTemplate")
     sub.key = key
     sub.rows = {}
-    sub:SetFrameStrata("HIGH")
+    Theme:UseStrata(sub, 1)
     sub:SetClampedToScreen(true)
     sub:SetSize(ROW_WIDTH + SUB_PAD * 2, 80)
     sub:Hide()

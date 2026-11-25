@@ -1154,7 +1154,7 @@ local function CreateList()
     local orb = MB.RadialMenu.orb
 
     list = CreateFrame("Frame", "MageButlerBuffList", UIParent, "SecureHandlerBaseTemplate")
-    list:SetFrameStrata("HIGH")
+    Theme:UseStrata(list, 1)
     list:SetClampedToScreen(true)
     list:SetSize(LIST_COLUMNS * (CELL_WIDTH + CELL_GAP), 8 * (CELL_HEIGHT + CELL_GAP))
     list:Hide()

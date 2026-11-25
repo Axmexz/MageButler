@@ -879,6 +879,25 @@ builders.appearance = function(page)
     Checkbox(page, COLUMN, -116, "Status animations",
         "The status pips on the orb pulse while something needs attention, and the orb's halo and ripple move with them. Steady when all is well.",
         Field("appearance", appearance, "statusAnimations"))
+
+    -- One choice moves the whole addon between layers of the interface.
+    -- The names are the game's own, tidied: a player reaching for this
+    -- setting is one who already knows what a frame strata is.
+    local function Pretty(name)
+        local text = name:gsub("_", " "):lower()
+        return text:sub(1, 1):upper() .. text:sub(2)
+    end
+    local strataOptions = {}
+    for i = 1, #Theme.STRATA do
+        local name = Theme.STRATA[i]
+        strataOptions[i] = { name, name == "MEDIUM" and "Medium (default)" or Pretty(name) }
+    end
+
+    Label(page, 0, -154, "UI Strata", 12, nil, 114)
+    Cycle(page, 120, -150, 150, "UI Strata",
+        "Which layer of the interface MageButler draws on. Raise it to keep the orb above other addons, lower it to tuck it behind them. Everything moves together and keeps its own order: the orb at the layer you pick, the panels and the toast just above it, the settings window above those.",
+        strataOptions,
+        Field("appearance", appearance, "strata"))
 end
 
 -------------------------------------------------------------------------------
@@ -948,7 +967,7 @@ local function CreateFrameOnce()
     frame = Theme:CreatePanel("MageButlerSettings", UIParent, "bg")
     frame:SetSize(WIDTH, HEIGHT)
     frame:SetPoint("CENTER")
-    frame:SetFrameStrata("DIALOG")
+    Theme:UseStrata(frame, 2)
     frame:SetClampedToScreen(true)
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -1071,7 +1090,7 @@ local function CreateWelcome()
     welcome = Theme:CreatePanel("MageButlerWelcome", UIParent, "bg")
     welcome:SetSize(416, WELCOME_HEIGHT)
     welcome:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
-    welcome:SetFrameStrata("DIALOG")
+    Theme:UseStrata(welcome, 2)
     welcome:SetClampedToScreen(true)
     welcome:SetMovable(true)
     welcome:EnableMouse(true)

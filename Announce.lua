@@ -201,7 +201,7 @@ end
 
 local function CreateOffer()
     offer = Theme:CreateButton(UIParent, "", 260, 26)
-    offer:SetFrameStrata("HIGH")
+    Theme:UseStrata(offer, 1)
     offer:SetPoint("TOP", UIParent, "TOP", 0, -232)
     offer:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     offer:Hide()

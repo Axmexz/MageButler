@@ -2,7 +2,7 @@
 ## Title: |cff5ed7ffMage|r|cffb79cffButler|r
 ## Notes: Your personal Mage assistant: a radial orb for portals, teleports and conjuring, reagent restocking, trade filling, portal announcements and a preparation check.
 ## Author: Padre Pidisc
-## Version: 1.1.6
+## Version: 1.1.7
 ## X-License: All Rights Reserved
 ## X-Copyright: Copyright (c) 2026 Padre Pidisc
 ## IconTexture: Interface\Icons\Spell_Holy_MagicalSentry

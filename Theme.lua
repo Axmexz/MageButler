@@ -260,7 +260,49 @@ function Theme:SkinRound(button)
     button.glow:SetPoint("BOTTOMRIGHT", 9, -9)
     self:UseAccent(button.glow, "SetVertexColor", 0.55)
 
+    -- What shape it is now, so SetShape knows there is nothing to do and does
+    -- not add a second mask on top of this one.
+    button.mbShape = "round"
+
     return button
+end
+
+--- Puts an already-skinned button into "round" or "square".
+---
+--- The disc and the border are swapped, and the icon's mask is **removed**
+--- for a square rather than replaced with a square one: a square mask over a
+--- square icon is a no-op, and masks stack rather than replace, so calling
+--- AddMaskTexture a second time would multiply the two and leave a circle.
+--- The one mask made at skin time is kept on `button.mask` and only ever has
+--- its texture set, never a second one added.
+---
+--- The icon crop stays in both shapes. It trims the border off Blizzard's own
+--- icon art, which a square button needs just as much as a round one.
+---
+--- Textures are regions, so none of this is protected. It is still called
+--- from inside the combat queue alongside the placement, because artwork on
+--- one shape and positions from another is worse than waiting.
+function Theme:SetShape(button, shape)
+    if not button or not button.bg then return end
+    local media = MB.MEDIA
+    local square = shape == "square"
+    if button.mbShape == shape then return end
+    button.mbShape = shape
+
+    button.bg:SetTexture(media .. (square and "Square.tga" or "Circle.tga"))
+    button.ring:SetTexture(media .. (square and "SquareRing.tga" or "Ring.tga"))
+
+    -- The mask may legitimately not exist: SkinRound only makes one where the
+    -- client offers CreateMaskTexture.
+    local mask = button.mask
+    if mask and button.icon.AddMaskTexture then
+        if square then
+            button.icon:RemoveMaskTexture(mask)
+        else
+            mask:SetTexture(media .. "Circle.tga", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            button.icon:AddMaskTexture(mask)
+        end
+    end
 end
 
 --- A small status light on the rim of the orb: a dark disc with a coloured

@@ -747,23 +747,26 @@ local function ArcFor(radius, size)
     return towards, 180
 end
 
---- Positions the buttons and the submenus beside them. Out of combat only.
-function Radial:Layout()
-    local db = MB.db.radial
+--- Where the submenus open: towards the middle of the screen, so a menu near
+--- the right edge drops its list on the left. Shared by both arrangements.
+local function OpenRight()
+    local cx = orb:GetCenter()
+    if not cx then return true end
+    return cx * orb:GetScale() < UIParent:GetWidth() * 0.6
+end
+
+--- The original arrangement: buttons on a circle around the orb, or on an
+--- arc where the screen edge leaves no room for a full one.
+---
+--- This is the path a player who never touches the layout setting takes, and
+--- it is kept exactly as it was. A harness phase asserts its anchors, sizes
+--- and menu extent against figures read from the addon before any of the
+--- other arrangements existed.
+local function LayoutClassic(db, visible)
     local size, radius = db.buttonSize, db.radius
 
-    local visible = {}
-    for _, key in ipairs(ORDER) do
-        local button = buttons[key]
-        if db.buttons[key] then
-            visible[#visible + 1] = button
-        else
-            button:Hide()
-        end
-    end
-
     local centre, span = ArcFor(radius, size)
-    self.arcCentre, self.arcSpan = centre, span
+    Radial.arcCentre, Radial.arcSpan = centre, span
 
     local count = #visible
     for i = 1, count do
@@ -792,11 +795,7 @@ function Radial:Layout()
     menu.orbit:SetShown(count > 0 and span >= 360)
 
     -- Submenus open towards the middle of the screen.
-    local openRight = true
-    local cx = orb:GetCenter()
-    if cx then
-        openRight = cx * orb:GetScale() < UIParent:GetWidth() * 0.6
-    end
+    local openRight = OpenRight()
     local offset = radius + size / 2 + 16
     for _, sub in pairs(subs) do
         sub:ClearAllPoints()
@@ -806,6 +805,101 @@ function Radial:Layout()
             sub:SetPoint("RIGHT", menu, "CENTER", -offset, 0)
         end
     end
+end
+
+--- Any other arrangement, placed by Layout.lua.
+---
+--- Returns false if the stored preset is one this version does not know, so
+--- a profile from a newer build falls back to the circle rather than erroring.
+local function LayoutEngine(db, visible)
+    local size = db.buttonSize
+    local positions, width, height, top = MB.Layout:Positions(db.preset, #visible, {
+        size = size,
+        launcher = ORB_SIZE,
+        gapX = db.gapX,
+        gapY = db.gapY,
+        columns = db.columns,
+        direction = db.direction,
+        radius = db.radius,
+    })
+    if not positions then return false end
+
+    for i = 1, #visible do
+        local button = visible[i]
+        local point = positions[i]
+        button:SetSize(size, size)
+        button:ClearAllPoints()
+        button:SetPoint("CENTER", menu, "CENTER", point.x, point.y)
+        button.label:SetShown(db.showLabels)
+        button:Show()
+    end
+
+    -- The frame is still centred on the orb and must cover the furthest
+    -- button; Layout.lua has already doubled the reach for that.
+    menu:SetSize(math.max(width, ORB_SIZE), math.max(height, ORB_SIZE))
+    -- The orbit ring is a circle and means nothing off the circle.
+    menu.orbit:Hide()
+
+    -- Cleared rather than left behind: these are module fields that nothing
+    -- else resets, and a stale pair from the classic path would read as
+    -- though this arrangement were still a circle.
+    Radial.arcCentre, Radial.arcSpan = nil, nil
+    Radial.clearance = top
+
+    -- Here a submenu hangs off its own button. Anchoring it to the middle of
+    -- the frame, as the circle does, would drop it across a toolbar's own
+    -- buttons.
+    local openRight = OpenRight()
+    for key, sub in pairs(subs) do
+        local parent = buttons[key]
+        sub:ClearAllPoints()
+        if openRight then
+            sub:SetPoint("LEFT", parent, "RIGHT", 10, 0)
+        else
+            sub:SetPoint("RIGHT", parent, "LEFT", -10, 0)
+        end
+    end
+    return true
+end
+
+--- Positions the buttons and the submenus beside them. Out of combat only.
+---
+--- Which arrangement is used is the one decision made here: the original
+--- circle, or one of the others from Layout.lua.
+function Radial:Layout()
+    local db = MB.db.radial
+
+    local visible = {}
+    for _, key in ipairs(ORDER) do
+        local button = buttons[key]
+        if db.buttons[key] then
+            visible[#visible + 1] = button
+        else
+            button:Hide()
+        end
+    end
+
+    -- Shape is settled here, with the placement, rather than in RefreshVisuals
+    -- where the rest of the artwork lives. RefreshVisuals runs immediately,
+    -- outside the combat queue, so a shape change made in a fight would land
+    -- while the positions and sizes waited for it to end: square buttons on a
+    -- circle, behind a round orbit ring, until the fight was over.
+    --
+    -- Classic Radial is round, full stop. The shape setting belongs to the
+    -- other arrangements, and reaching it cannot change the original.
+    -- The orb itself stays round. Its artwork is a sphere with a halo, a
+    -- ripple and a flash, all drawn from radial textures, and none of them has
+    -- a square counterpart; squaring it is its own piece of work, not a
+    -- side effect of this setting.
+    local engine = MB.Layout:Handles(db.preset)
+    local shape = engine and db.buttonShape or "round"
+    for _, key in ipairs(ORDER) do
+        Theme:SetShape(buttons[key], shape)
+    end
+
+    if engine and LayoutEngine(db, visible) then return end
+    self.clearance = nil
+    LayoutClassic(db, visible)
 end
 
 function Radial:ApplyBindings()

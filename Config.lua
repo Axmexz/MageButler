@@ -26,6 +26,19 @@ Config.defaults = {
     radial = {
         radius = 78,
         buttonSize = 40,
+        -- Which arrangement the menu uses. "classic" is the original circle
+        -- and stays on its own code path; every other name is handled by
+        -- Layout.lua. New keys, so no Remaster entry is needed: ApplyDefaults
+        -- puts them into every existing profile on the next login.
+        preset = "classic",
+        -- Round or square, for the alternative arrangements only. The orb
+        -- keeps its own shape: its sphere, halo and ripple are all radial
+        -- art with no square counterpart.
+        buttonShape = "round",
+        gapX = 8,
+        gapY = 8,
+        columns = 3,               -- for the grid
+        direction = "down",        -- "up", "down", "left" or "right"
         animations = true,
         showLabels = true,
         showCounts = true,
@@ -246,6 +259,9 @@ local function Sanitise(profile, defaults)
     Clamp(profile.general, "uiScale", 0.6, 1.6, defaults.general.uiScale)
     Clamp(profile.radial, "radius", 50, 140, defaults.radial.radius)
     Clamp(profile.radial, "buttonSize", 28, 56, defaults.radial.buttonSize)
+    Clamp(profile.radial, "gapX", 0, 40, defaults.radial.gapX)
+    Clamp(profile.radial, "gapY", 0, 40, defaults.radial.gapY)
+    Clamp(profile.radial, "columns", 1, 6, defaults.radial.columns)
     Clamp(profile.appearance, "panelAlpha", 0.5, 1, defaults.appearance.panelAlpha)
     for _, name in ipairs({ "buffwatch", "readiness" }) do
         local section = profile[name]

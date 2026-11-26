@@ -11,6 +11,7 @@
 MageButler.lua
 Config.lua
 Theme.lua
+Layout.lua
 Spells.lua
 Conjuring.lua
 Reagents.lua

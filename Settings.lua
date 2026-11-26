@@ -16,6 +16,7 @@ local PAGE_WIDTH = WIDTH - SIDEBAR - 54 -- usable width of a settings page
 local SECTIONS = {
     { key = "general", label = "General", icon = "Interface\\Icons\\Trade_Engineering" },
     { key = "radial", label = "Radial Menu", icon = "Interface\\Icons\\Spell_Holy_MagicalSentry" },
+    { key = "layout", label = "Menu Layout", icon = "Interface\\Icons\\INV_Misc_Gear_01" },
     { key = "buffwatch", label = "Buff Watch", icon = "Interface\\Icons\\Spell_Holy_ArcaneIntellect" },
     { key = "reagents", label = "Reagents", icon = "Interface\\Icons\\INV_Misc_Rune_06" },
     { key = "conjuring", label = "Conjuring", icon = "Interface\\Icons\\INV_Drink_07" },
@@ -543,6 +544,122 @@ builders.radial = function(page)
         KeybindRow(page, column * KEY_COLUMN, -250 - row * 26, bindings[i])
     end
     Note(page, -334, "Spells are always cast by your own key press or click. Keys set here work while MageButler is enabled and override the game's binding for the same key.")
+end
+
+
+-- Which arrangement the menu uses, and the sizes that go with it.
+--
+-- Everything here is stored under `radial` and fires Changed("radial"), not
+-- "layout": Radial:Apply only rebuilds for nil, "all", "general" or "radial",
+-- so a section of its own would fire an event nothing acts on and changing
+-- the arrangement would appear to do nothing at all.
+builders.layout = function(page)
+    local function radial() return MB.db.radial end
+    local function whole(value) return tostring(math.floor(value + 0.5)) end
+
+    local presets = {}
+    for i = 1, #MB.Layout.PRESETS do
+        presets[i] = { MB.Layout.PRESETS[i][1], MB.Layout.PRESETS[i][2] }
+    end
+
+    Header(page, 0, "Menu Layout")
+    Label(page, 0, -34, "Arrangement", 12, nil, 114)
+    Cycle(page, 120, -30, 170, "Arrangement",
+        "How the buttons sit around the orb. Classic Radial is the original circle and is unaffected by anything else on this page.",
+        presets, Field("radial", radial, "preset"))
+
+    Label(page, 0, -64, "Button shape", 12, nil, 114)
+    Cycle(page, 120, -60, 110, "Button shape",
+        "Round or square buttons. The orb itself stays round: its sphere, halo and ripple are drawn from round artwork with no square counterpart.",
+        { { "round", "Round" }, { "square", "Square" } },
+        Field("radial", radial, "buttonShape"))
+
+    Label(page, 0, -94, "Opens towards", 12, nil, 114)
+    Cycle(page, 120, -90, 110, "Opens towards",
+        "Which way a toolbar or side panel runs from the orb. Arrangements that sit around the orb ignore this.",
+        { { "down", "Down" }, { "up", "Up" }, { "right", "Right" }, { "left", "Left" } },
+        Field("radial", radial, "direction"))
+
+    Slider(page, 0, -126, 200, "Gap across", "Space between buttons side to side.", 0, 40, 1, whole,
+        Field("radial", radial, "gapX"))
+    Slider(page, COLUMN, -126, 200, "Gap down", "Space between rows.", 0, 40, 1, whole,
+        Field("radial", radial, "gapY"))
+    Slider(page, 0, -172, 200, "Grid columns", "How many across the Compact Grid uses.", 1, 6, 1, whole,
+        Field("radial", radial, "columns"))
+
+    Note(page, -214, "Classic Radial keeps its own radius and button size on the Radial Menu page. The other arrangements use the button size from there and the gaps from here.")
+
+    -- The preview. Plain textures on a plain frame: it is not built from a
+    -- secure template, sets no attributes and casts nothing, so it is not
+    -- protected and can redraw in combat while the real menu waits.
+    Header(page, -258, "Preview")
+    local stage = CreateFrame("Frame", nil, page)
+    stage:SetPoint("TOPLEFT", 0, -282)
+    stage:SetSize(PAGE_WIDTH, 196)
+
+    local field = Theme:CreatePanel(nil, stage, "bg")
+    field:SetAllPoints()
+
+    -- Built once. The refresher only moves them: Refresh runs every refresher
+    -- on every page on every settings change, so creating anything in here
+    -- would leak a texture per keystroke.
+    local launcher = stage:CreateTexture(nil, "ARTWORK")
+    launcher:SetTexture(MB.MEDIA .. "Circle.tga")
+    launcher:SetSize(18, 18)
+    Theme:UseAccent(launcher, "SetVertexColor", 1)
+
+    local dots = {}
+    for i = 1, 6 do
+        local dot = stage:CreateTexture(nil, "ARTWORK")
+        dot:SetSize(15, 15)
+        dot:SetVertexColor(Theme:Color("text"))
+        dots[i] = dot
+    end
+
+    local caption = Label(page, 0, -484, "", 10, "dim", PAGE_WIDTH)
+
+    refreshers[#refreshers + 1] = function()
+        local db = MB.db.radial
+        local square = MB.Layout:Handles(db.preset) and db.buttonShape == "square"
+        local shape = MB.MEDIA .. (square and "Square.tga" or "Circle.tga")
+
+        -- Everything is drawn at a quarter size so a toolbar six buttons long
+        -- still fits the panel; the arrangement is the same arithmetic the
+        -- menu itself uses, so the two cannot drift apart.
+        local scale = 0.25
+        local positions = MB.Layout:Positions(db.preset, 6, {
+            size = db.buttonSize, launcher = 46,
+            gapX = db.gapX, gapY = db.gapY,
+            columns = db.columns, direction = db.direction,
+            radius = db.radius,
+        })
+
+        launcher:ClearAllPoints()
+        launcher:SetPoint("CENTER", stage, "CENTER", 0, 0)
+
+        if not positions then
+            -- Classic Radial, or a name this build does not know: draw the
+            -- circle it will actually get.
+            for i = 1, 6 do
+                local angle = math.rad(90 - (i - 1) * 60)
+                dots[i]:SetTexture(MB.MEDIA .. "Circle.tga")
+                dots[i]:ClearAllPoints()
+                dots[i]:SetPoint("CENTER", stage, "CENTER",
+                    db.radius * scale * math.cos(angle), db.radius * scale * math.sin(angle))
+                dots[i]:Show()
+            end
+            caption:SetText("Classic Radial: the original circle, round buttons, unchanged.")
+            return
+        end
+
+        for i = 1, 6 do
+            dots[i]:SetTexture(shape)
+            dots[i]:ClearAllPoints()
+            dots[i]:SetPoint("CENTER", stage, "CENTER", positions[i].x * scale, positions[i].y * scale)
+            dots[i]:Show()
+        end
+        caption:SetText("Six buttons shown. The menu uses however many you have switched on, on the Radial Menu page.")
+    end
 end
 
 builders.buffwatch = function(page)

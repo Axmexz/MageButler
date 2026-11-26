@@ -1220,8 +1220,14 @@ function BuffWatch:PositionList()
         list:SetPoint("CENTER", UIParent, "CENTER", db.x / scale, db.y / scale)
         return
     end
+    -- Undragged, the list parks above the menu. How far above depends on how
+    -- far the menu reaches: the circle's own radius-plus-button sum where
+    -- that is what is drawn, and whatever the arrangement reports otherwise,
+    -- or the list lands on top of a toolbar's buttons.
     local radial = MB.db.radial
-    list:SetPoint("BOTTOM", MB.RadialMenu.orb, "TOP", 0, radial.radius + radial.buttonSize + 12)
+    local clearance = MB.RadialMenu.clearance
+    local above = clearance and (clearance + 12) or (radial.radius + radial.buttonSize + 12)
+    list:SetPoint("BOTTOM", MB.RadialMenu.orb, "TOP", 0, above)
 end
 
 --- Opens or closes the player list from insecure code (outside combat).

@@ -276,6 +276,18 @@ local function CreateMenu()
         -- The moment the counts are looked at: read them now, so the menu
         -- shows what is in the bags even if a bag update went missing.
         MB:RefreshInventory(false, "menu")
+        -- Where an arrangement fits depends on where the orb is standing, and
+        -- the orb can get there without anything laying the menu out again:
+        -- restored from the profile at login, moved by a copied profile, or
+        -- nudged by its own screen clamp. Opening the menu is the moment that
+        -- matters, so the room is measured here as well as on a drag.
+        --
+        -- Out of combat only, and deliberately not queued: placing the
+        -- buttons is protected work on the orb's own children, and the orb
+        -- cannot be dragged during a fight, so a queued pass would have
+        -- nothing to catch up on. The classic circle re-reads its own edge
+        -- policy here for the same reason.
+        if not InCombatLockdown() then Radial:Layout() end
         Radial:RefreshVisuals()
     end)
 

@@ -5,9 +5,11 @@ local _, MB = ...
 local Settings = MB:NewModule("Settings")
 local Theme
 
--- The Announcements page is the tallest and sets the height: with a preview
--- under each of its three messages it needs every pixel of this.
-local WIDTH, HEIGHT = 640, 576
+-- The Appearance page is the tallest and sets the height: it carries the
+-- whole of the menu's arrangement and a preview of it, and ends near -602 of
+-- the page's 608. The Announcements page, which used to set this, ends near
+-- -484 and now has room to spare.
+local WIDTH, HEIGHT = 640, 680
 local SIDEBAR = 152
 local TITLE = 38
 local COLUMN = 215 -- horizontal distance between option columns
@@ -22,7 +24,6 @@ local SECTIONS = {
     { key = "trading", label = "Trading", icon = "Interface\\Icons\\INV_Misc_Bag_10" },
     { key = "announce", label = "Announcements", icon = "Interface\\Icons\\Spell_Arcane_PortalStormWind" },
     { key = "appearance", label = "Appearance", icon = "Interface\\Icons\\INV_Misc_Gem_Sapphire_02" },
-    { key = "layout", label = "Menu Layout", icon = "Interface\\Icons\\INV_Misc_Gear_01" },
 }
 
 local IGNORED_KEYS = {
@@ -318,31 +319,171 @@ local function PanelButton(page, x, y, text, width, tooltip, onClick)
     return button
 end
 
---- A button that steps through a fixed list of choices: { { value, label }, ... }.
-local function Cycle(page, x, y, width, title, tooltip, options, get, set)
+-------------------------------------------------------------------------------
+-- Dropdowns
+--
+-- These used to be click-cycles: one button that stepped to the next choice
+-- each time it was pressed. That is fine for two options and poor for eleven,
+-- where the only way to see what is on offer is to click through the lot and
+-- the only way back is to go all the way round.
+--
+-- Its replacement keeps the same signature, so a control is a dropdown or a
+-- cycle by one word at the call site and nothing else changes.
+--
+-- Only one list is open at a time. It is parented to the settings window
+-- rather than to the page, so it can hang past the page's edge, and it comes
+-- with a catcher behind it covering the whole window, which closes it on a
+-- click anywhere else. Both are plain frames in the settings window, which is
+-- never secure, so none of this is protected and no part of it waits for
+-- combat.
+-------------------------------------------------------------------------------
+local openList    -- the list showing now, if any
+
+local ROW_H = 18
+
+--- The window a control sits in, which is where its list belongs.
+local function Host(widget)
+    local parent = widget:GetParent()
+    while parent and parent ~= UIParent do
+        widget = parent
+        parent = widget:GetParent()
+    end
+    return widget
+end
+
+local function CloseDropdown()
+    if openList then
+        openList:Hide()
+        openList = nil
+    end
+end
+
+local function Dropdown(page, x, y, width, title, tooltip, options, get, set)
     local button = Theme:CreateButton(page, "", width, 20)
     button:SetPoint("TOPLEFT", x, y)
+
+    -- The value sits left, the arrow right, so a long label does not run over
+    -- the arrow and the arrow does not wander with the text length.
+    button.label:ClearAllPoints()
+    button.label:SetPoint("LEFT", 7, 0)
+    button.label:SetPoint("RIGHT", -18, 0)
+    button.label:SetJustifyH("LEFT")
+    button.label:SetWordWrap(false)
+
+    local arrow = button:CreateTexture(nil, "ARTWORK")
+    arrow:SetTexture(MB.MEDIA .. "Chevron.tga")
+    arrow:SetSize(8, 8)
+    arrow:SetPoint("RIGHT", -6, 0)
+    Theme:UseAccent(arrow, "SetVertexColor", 0.9)
+
     --- Writes the current choice on the button.
     local function Show()
         local current = get()
-        local text = options[1][2]
+        local text = options[1] and options[1][2] or ""
         for i = 1, #options do
             if options[i][1] == current then text = options[i][2] end
         end
         button.label:SetText(text)
     end
-    button:SetScript("OnClick", function()
-        local current = get()
-        local index = 1
+
+    local list, rows, host
+
+    --- Builds the list the first time it is wanted. Kept afterwards: a page
+    --- refresh must not create frames, and nor must opening a list twice.
+    local function Build()
+        -- Parented to whichever window the control is in, not to the settings
+        -- window: the greeting has one of these too, and a list parented to a
+        -- window that is not open would never be seen.
+        host = Host(button)
+        list = CreateFrame("Frame", nil, host)
+        list:SetSize(math.max(width, 80), #options * ROW_H + 8)
+        Theme:CreatePanel(nil, list, "raised"):SetAllPoints()
+        Theme:UseStrata(list, 3)   -- the settings window and the greeting are 2
+        list:SetFrameLevel(host:GetFrameLevel() + 20)
+        list:Hide()
+
+        -- Behind the list and in front of everything else: a click anywhere
+        -- but on the list closes it.
+        local catcher = CreateFrame("Button", nil, list)
+        catcher:SetPoint("CENTER", host, "CENTER")
+        catcher:SetSize(2048, 2048)
+        catcher:SetFrameLevel(list:GetFrameLevel() - 1)
+        catcher:RegisterForClicks("AnyUp")
+        catcher:SetScript("OnClick", CloseDropdown)
+
+        rows = {}
         for i = 1, #options do
-            if options[i][1] == current then index = i % #options + 1 end
+            local row = CreateFrame("Button", nil, list)
+            row:SetSize(list:GetWidth() - 8, ROW_H)
+            row:SetPoint("TOPLEFT", 4, -4 - (i - 1) * ROW_H)
+            row:SetFrameLevel(list:GetFrameLevel() + 1)
+
+            row.text = Theme:Text(row, 11)
+            row.text:SetPoint("LEFT", 4, 0)
+            row.text:SetPoint("RIGHT", -4, 0)
+            row.text:SetJustifyH("LEFT")
+            row.text:SetWordWrap(false)
+            row.text:SetText(options[i][2])
+
+            local highlight = row:CreateTexture(nil, "HIGHLIGHT")
+            highlight:SetTexture(MB.MEDIA .. "Circle.tga")
+            highlight:SetAllPoints()
+            Theme:UseAccent(highlight, "SetVertexColor", 0.2)
+
+            -- A tick beside whichever one is in force, so the list says what
+            -- is set as well as what is available.
+            row.mark = Theme:Text(row, 11)
+            row.mark:SetPoint("RIGHT", -4, 0)
+            Theme:UseAccent(row.mark, "SetTextColor", 1)
+
+            -- What this row stands for, so the list can be driven by value
+            -- rather than by counting clicks the way a cycle had to be.
+            row.value = options[i][1]
+            row:SetScript("OnClick", function()
+                CloseDropdown()
+                set(options[i][1])
+                Show()   -- at once: the page's refreshers only run while the panel is open
+            end)
+            rows[i] = row
         end
-        set(options[index][1])
-        Show()   -- at once: the page's refreshers only run while the panel is open
+        list.rows = rows
+        button.list = list
+    end
+
+    button:SetScript("OnClick", function(self)
+        if openList == list and list and list:IsShown() then
+            CloseDropdown()
+            return
+        end
+        CloseDropdown()
+        if not list then Build() end
+
+        local current = get()
+        for i = 1, #rows do
+            rows[i].mark:SetText(options[i][1] == current and "*" or "")
+            rows[i].text:SetText(options[i][2])
+        end
+
+        -- Opens downwards, or upwards where the window has no room below.
+        -- Measured rather than assumed: the longest list here is the eleven
+        -- arrangements, and where that control ends up on the page decides
+        -- which way it has to go.
+        list:ClearAllPoints()
+        local below = self:GetBottom() and host:GetBottom()
+            and (self:GetBottom() - host:GetBottom()) or 0
+        if below >= list:GetHeight() then
+            list:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -2)
+        else
+            list:SetPoint("BOTTOMLEFT", self, "TOPLEFT", 0, 2)
+        end
+        list:Show()
+        openList = list
     end)
+
     Theme:AttachTooltip(button, title, tooltip)
     refreshers[#refreshers + 1] = Show
     button.Refresh = Show
+    button.CloseList = CloseDropdown
     return button
 end
 
@@ -573,114 +714,6 @@ builders.radial = function(page)
 end
 
 
--- Which arrangement the menu uses, and the sizes that go with it.
---
--- Everything here is stored under `radial` and fires Changed("radial"), not
--- "layout": Radial:Apply only rebuilds for nil, "all", "general" or "radial",
--- so a section of its own would fire an event nothing acts on and changing
--- the arrangement would appear to do nothing at all.
-builders.layout = function(page)
-    local function radial() return MB.db.radial end
-    local function whole(value) return tostring(math.floor(value + 0.5)) end
-
-    Header(page, 0, "Menu Layout")
-    Label(page, 0, -34, "Arrangement", 12, nil, 114)
-    Cycle(page, 120, -30, 170, "Arrangement", ARRANGEMENT_HELP,
-        PresetOptions(), RadialField("preset"))
-
-    Label(page, 0, -64, "Button shape", 12, nil, 114)
-    Cycle(page, 120, -60, 110, "Button shape", SHAPE_HELP,
-        SHAPE_OPTIONS, RadialField("buttonShape"))
-
-    Label(page, 0, -94, "Opens towards", 12, nil, 114)
-    Cycle(page, 120, -90, 110, "Opens towards",
-        "Which way a toolbar or side panel runs from the orb. Arrangements that sit around the orb ignore this.",
-        { { "down", "Down" }, { "up", "Up" }, { "right", "Right" }, { "left", "Left" } },
-        Field("radial", radial, "direction"))
-
-    Slider(page, 0, -126, 200, "Gap across", "Space between buttons side to side.", 0, 40, 1, whole,
-        Field("radial", radial, "gapX"))
-    Slider(page, COLUMN, -126, 200, "Gap down", "Space between rows.", 0, 40, 1, whole,
-        Field("radial", radial, "gapY"))
-    Slider(page, 0, -172, 200, "Grid columns", "How many across the Compact Grid uses.", 1, 6, 1, whole,
-        Field("radial", radial, "columns"))
-
-    Note(page, -214, "Classic Radial keeps its own radius and button size on the Radial Menu page. The other arrangements use the button size from there and the gaps from here. Near a screen edge an arrangement is mirrored onto whichever side has room, so the preview below shows it with the orb in open space.")
-
-    -- The preview. Plain textures on a plain frame: it is not built from a
-    -- secure template, sets no attributes and casts nothing, so it is not
-    -- protected and can redraw in combat while the real menu waits.
-    Header(page, -258, "Preview")
-    local stage = CreateFrame("Frame", nil, page)
-    stage:SetPoint("TOPLEFT", 0, -282)
-    stage:SetSize(PAGE_WIDTH, 196)
-
-    local field = Theme:CreatePanel(nil, stage, "bg")
-    field:SetAllPoints()
-
-    -- Built once. The refresher only moves them: Refresh runs every refresher
-    -- on every page on every settings change, so creating anything in here
-    -- would leak a texture per keystroke.
-    local launcher = stage:CreateTexture(nil, "ARTWORK")
-    launcher:SetTexture(MB.MEDIA .. "Circle.tga")
-    launcher:SetSize(18, 18)
-    Theme:UseAccent(launcher, "SetVertexColor", 1)
-
-    local dots = {}
-    for i = 1, 6 do
-        local dot = stage:CreateTexture(nil, "ARTWORK")
-        dot:SetSize(15, 15)
-        dot:SetVertexColor(Theme:Color("text"))
-        dots[i] = dot
-    end
-
-    local caption = Label(page, 0, -484, "", 10, "dim", PAGE_WIDTH)
-
-    refreshers[#refreshers + 1] = function()
-        local db = MB.db.radial
-        local square = MB.Layout:Handles(db.preset) and db.buttonShape == "square"
-        local shape = MB.MEDIA .. (square and "Square.tga" or "Circle.tga")
-
-        -- Everything is drawn at a quarter size so a toolbar six buttons long
-        -- still fits the panel; the arrangement is the same arithmetic the
-        -- menu itself uses, so the two cannot drift apart.
-        local scale = 0.25
-        local positions = MB.Layout:Positions(db.preset, 6, {
-            size = db.buttonSize, launcher = 46,
-            gapX = db.gapX, gapY = db.gapY,
-            columns = db.columns, direction = db.direction,
-            radius = db.radius,
-        })
-
-        launcher:SetTexture(shape)
-        launcher:ClearAllPoints()
-        launcher:SetPoint("CENTER", stage, "CENTER", 0, 0)
-
-        if not positions then
-            -- Classic Radial, or a name this build does not know: draw the
-            -- circle it will actually get.
-            for i = 1, 6 do
-                local angle = math.rad(90 - (i - 1) * 60)
-                dots[i]:SetTexture(MB.MEDIA .. "Circle.tga")
-                dots[i]:ClearAllPoints()
-                dots[i]:SetPoint("CENTER", stage, "CENTER",
-                    db.radius * scale * math.cos(angle), db.radius * scale * math.sin(angle))
-                dots[i]:Show()
-            end
-            caption:SetText("Classic Radial: the original circle, round buttons, unchanged.")
-            return
-        end
-
-        for i = 1, 6 do
-            dots[i]:SetTexture(shape)
-            dots[i]:ClearAllPoints()
-            dots[i]:SetPoint("CENTER", stage, "CENTER", positions[i].x * scale, positions[i].y * scale)
-            dots[i]:Show()
-        end
-        caption:SetText("Six buttons shown, with room on every side. The menu uses however many you have switched on, on the Radial Menu page.")
-    end
-end
-
 builders.buffwatch = function(page)
     local function watch() return MB.db.buffwatch end
     local RIGHT = COLUMN
@@ -716,7 +749,7 @@ builders.buffwatch = function(page)
         "Buffs a low-level player with the strongest rank their level can receive, instead of your own best rank, which the game would refuse. Turn this off to always cast your highest rank.",
         Field("buffwatch", watch, "matchLevel"))
     Label(page, RIGHT, -190, "Brilliance covers", 12, nil, 104)
-    Cycle(page, RIGHT + 110, -186, 104, "Arcane Brilliance covers",
+    Dropdown(page, RIGHT + 110, -186, 104, "Arcane Brilliance covers",
         "Whether one cast reaches the target's group or the whole raid. Automatic reads the spell's own description.",
         { { "auto", "Automatic" }, { "group", "Target's group" }, { "raid", "Whole raid" } },
         Field("buffwatch", watch, "scope"))
@@ -743,7 +776,7 @@ builders.buffwatch = function(page)
     Checkbox(page, 0, -422, "Names in tooltip", "Lists the players who need a buff in the orb's tooltip.",
         Field("buffwatch", watch, "tooltipNames"))
     Label(page, RIGHT, -426, "Notifications", 12, nil, 104)
-    Cycle(page, RIGHT + 110, -422, 104, "Buff Watch notifications",
+    Dropdown(page, RIGHT + 110, -422, 104, "Buff Watch notifications",
         "Where Buff Watch says what a right-click cast, or why it did nothing.",
         { { "toast", "On screen" }, { "chat", "Chat" }, { "off", "Off" } },
         Field("buffwatch", watch, "notify"))
@@ -846,7 +879,7 @@ builders.trading = function(page)
     local selected = "party"
     local boxes = {}
     Label(page, 0, -90, "Amounts for", 12, nil, 86)
-    Cycle(page, 92, -86, 130, "Amounts for",
+    Dropdown(page, 92, -86, 130, "Amounts for",
         "Which set of numbers the table below shows and edits. Each kind of trade partner has its own.",
         { { "party", "Party members" }, { "raid", "Raid members" }, { "other", "Other players" } },
         function() return selected end,
@@ -949,7 +982,7 @@ builders.announce = function(page)
     local HOW_X = 222   -- just past the cycle button, which ends at 210
     local function Channel(y, key, where, how)
         Label(page, 0, y - 4, "Announce in", 12, nil, 86)
-        Cycle(page, 92, y, 118, "Announce in",
+        Dropdown(page, 92, y, 118, "Announce in",
             "Where your portal is announced " .. where .. ". Party and raid chat only reach your group, and nothing is said when the channel would reach nobody.",
             Announce.CHANNELS, Field("announce", announce, key))
         -- Held inside the page: uncapped, this ran past the right edge.
@@ -987,8 +1020,25 @@ builders.announce = function(page)
     Note(page, -458, "{portal} is the destination, {player} is you, {spell} the spell's full name. A message is cut at 255 characters.")
 end
 
+-- Appearance, which carries the menu's arrangement as well.
+--
+-- The arrangement and its sizes were a page of their own for a day. They are
+-- here because this is the page a player opens to change what MageButler
+-- looks like, and the shape of the menu is the largest part of that; two
+-- pages meant choosing between them first.
+--
+-- This is now the tallest page and sets the window's height, which the
+-- Announcements page used to set. There is about one row spare under the
+-- preview, so anything else added here needs the window taller again
+-- (HEIGHT at the top of this file).
+--
+-- Everything in the layout half is stored under `radial` and fires
+-- Changed("radial"). Radial:Apply only rebuilds the menu for nil, "all",
+-- "general" or "radial", so a section of its own would fire an event nothing
+-- acts on and changing the arrangement would appear to do nothing at all.
 builders.appearance = function(page)
     local function appearance() return MB.db.appearance end
+    local function whole(value) return tostring(math.floor(value + 0.5)) end
 
     Header(page, 0, "Appearance")
     Label(page, 0, -34, "Accent colour", 12, nil, 114)
@@ -1010,9 +1060,9 @@ builders.appearance = function(page)
         function(value) return math.floor(value * 100 + 0.5) .. "%" end,
         Field("appearance", appearance, "panelAlpha"))
 
-    Checkbox(page, 0, -116, "Orb glow", "A soft halo behind the orb while something needs your attention: players to buff, or supplies running short. Dark when all is well.",
+    Checkbox(page, 0, -112, "Orb glow", "A soft halo behind the orb while something needs your attention: players to buff, or supplies running short. Dark when all is well.",
         Field("appearance", appearance, "glow"))
-    Checkbox(page, COLUMN, -116, "Status animations",
+    Checkbox(page, COLUMN, -112, "Status animations",
         "The status pips on the orb pulse while something needs attention, and the orb's halo and ripple move with them. Steady when all is well.",
         Field("appearance", appearance, "statusAnimations"))
 
@@ -1029,26 +1079,104 @@ builders.appearance = function(page)
         strataOptions[i] = { name, name == "MEDIUM" and "Medium (default)" or Pretty(name) }
     end
 
-    Label(page, 0, -154, "UI Strata", 12, nil, 114)
-    Cycle(page, 120, -150, 150, "UI Strata",
+    Label(page, 0, -148, "UI Strata", 12, nil, 114)
+    Dropdown(page, 120, -144, 150, "UI Strata",
         "Which layer of the interface MageButler draws on. Raise it to keep the orb above other addons, lower it to tuck it behind them. Everything moves together and keeps its own order: the orb at the layer you pick, the panels and the toast just above it, the settings window above those.",
         strataOptions,
         Field("appearance", appearance, "strata"))
 
-    -- The arrangement and the shape are here as well as on the Menu Layout
-    -- page: they are what the menu looks like, which is what a player opens
-    -- Appearance for. Both share one get/set pair with that page through
-    -- RadialField, so neither can drift from the other. The sizes, the
-    -- direction and the preview stay there, where there is room for them.
-    Label(page, 0, -194, "Menu arrangement", 12, nil, 114)
-    Cycle(page, 120, -190, 170, "Menu arrangement", ARRANGEMENT_HELP,
+    Header(page, -186, "Menu Layout")
+
+    Label(page, 0, -220, "Arrangement", 12, nil, 114)
+    Dropdown(page, 120, -216, 170, "Arrangement", ARRANGEMENT_HELP,
         PresetOptions(), RadialField("preset"))
 
-    Label(page, 0, -224, "Button shape", 12, nil, 114)
-    Cycle(page, 120, -220, 110, "Button shape", SHAPE_HELP,
+    Label(page, 0, -250, "Button shape", 12, nil, 114)
+    Dropdown(page, 120, -246, 110, "Button shape", SHAPE_HELP,
         SHAPE_OPTIONS, RadialField("buttonShape"))
 
-    Note(page, -256, "The Menu Layout page has the gaps, the grid's columns, which way a toolbar runs, and a preview of the arrangement you pick.")
+    Label(page, 0, -280, "Opens towards", 12, nil, 114)
+    Dropdown(page, 120, -276, 110, "Opens towards",
+        "Which way a toolbar or side panel runs from the orb. Arrangements that sit around the orb ignore this.",
+        { { "down", "Down" }, { "up", "Up" }, { "right", "Right" }, { "left", "Left" } },
+        RadialField("direction"))
+
+    Slider(page, 0, -312, 200, "Gap across", "Space between buttons side to side.", 0, 40, 1, whole,
+        RadialField("gapX"))
+    Slider(page, COLUMN, -312, 200, "Gap down", "Space between rows.", 0, 40, 1, whole,
+        RadialField("gapY"))
+    Slider(page, 0, -358, 200, "Grid columns", "How many across the Compact Grid uses.", 1, 6, 1, whole,
+        RadialField("columns"))
+
+    Note(page, -404, "Classic Radial keeps its own radius and button size on the Radial Menu page, and stays round whatever shape is set here. The other arrangements take the button size from that page and the gaps from this one. Near a screen edge an arrangement is mirrored onto whichever side has room, so the preview below shows it with the orb in open space.")
+
+    -- The preview. Plain textures on a plain frame: it is not built from a
+    -- secure template, sets no attributes and casts nothing, so it is not
+    -- protected and can redraw in combat while the real menu waits.
+    local stage = CreateFrame("Frame", nil, page)
+    stage:SetPoint("TOPLEFT", 0, -452)
+    stage:SetSize(PAGE_WIDTH, 150)
+
+    local field = Theme:CreatePanel(nil, stage, "bg")
+    field:SetAllPoints()
+
+    -- Built once. The refresher only moves them: Refresh runs every refresher
+    -- on every page on every settings change, so creating anything in here
+    -- would leak a texture per keystroke.
+    local launcher = stage:CreateTexture(nil, "ARTWORK")
+    launcher:SetTexture(MB.MEDIA .. "Circle.tga")
+    launcher:SetSize(15, 15)
+    Theme:UseAccent(launcher, "SetVertexColor", 1)
+
+    local dots = {}
+    for i = 1, 6 do
+        local dot = stage:CreateTexture(nil, "ARTWORK")
+        dot:SetSize(13, 13)
+        dot:SetVertexColor(Theme:Color("text"))
+        dots[i] = dot
+    end
+
+    refreshers[#refreshers + 1] = function()
+        local db = MB.db.radial
+        local square = MB.Layout:Handles(db.preset) and db.buttonShape == "square"
+        local shape = MB.MEDIA .. (square and "Square.tga" or "Circle.tga")
+
+        -- Everything is drawn at a fifth of its size, so a toolbar six buttons
+        -- long still fits the panel; the arrangement is the same arithmetic
+        -- the menu itself uses, so the two cannot drift apart.
+        local scale = 0.2
+        local positions = MB.Layout:Positions(db.preset, 6, {
+            size = db.buttonSize, launcher = 46,
+            gapX = db.gapX, gapY = db.gapY,
+            columns = db.columns, direction = db.direction,
+            radius = db.radius,
+        })
+
+        launcher:SetTexture(shape)
+        launcher:ClearAllPoints()
+        launcher:SetPoint("CENTER", stage, "CENTER", 0, 0)
+
+        if not positions then
+            -- Classic Radial, or a name this build does not know: draw the
+            -- circle it will actually get.
+            for i = 1, 6 do
+                local angle = math.rad(90 - (i - 1) * 60)
+                dots[i]:SetTexture(MB.MEDIA .. "Circle.tga")
+                dots[i]:ClearAllPoints()
+                dots[i]:SetPoint("CENTER", stage, "CENTER",
+                    db.radius * scale * math.cos(angle), db.radius * scale * math.sin(angle))
+                dots[i]:Show()
+            end
+            return
+        end
+
+        for i = 1, 6 do
+            dots[i]:SetTexture(shape)
+            dots[i]:ClearAllPoints()
+            dots[i]:SetPoint("CENTER", stage, "CENTER", positions[i].x * scale, positions[i].y * scale)
+            dots[i]:Show()
+        end
+    end
 end
 
 -------------------------------------------------------------------------------
@@ -1063,6 +1191,7 @@ end
 
 local function SelectPage(key)
     StopCapture()
+    CloseDropdown()   -- a list left open over a page that is no longer shown
     for sectionKey, page in pairs(pages) do
         page:SetShown(sectionKey == key)
     end
@@ -1125,7 +1254,10 @@ local function CreateFrameOnce()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    frame:SetScript("OnHide", StopCapture)
+    frame:SetScript("OnHide", function()
+        StopCapture()
+        CloseDropdown()
+    end)
     frame:Hide()
     tinsert(UISpecialFrames, "MageButlerSettings")
 
@@ -1391,7 +1523,7 @@ local function CreateWelcome()
     end
     local function ChannelButton(y, key, where)
         local get, set = Field("announce", announceDB, key)
-        local button = Cycle(choices, RIGHT_EDGE - CHANNEL, y, CHANNEL, "Announce in",
+        local button = Dropdown(choices, RIGHT_EDGE - CHANNEL, y, CHANNEL, "Announce in",
             "Where your portal is announced " .. where .. ". Party and raid chat only reach your group.",
             channels, get, set)
         welcomeChecks[#welcomeChecks + 1] = button.Refresh

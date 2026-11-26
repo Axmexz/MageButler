@@ -6,7 +6,7 @@ local ADDON_NAME, MB = ...
 _G.MageButler = MB
 
 MB.name = ADDON_NAME
-MB.version = "1.1.7"
+MB.version = "1.1.8"
 MB.author = "Padre Pidisc"
 MB.modules = {}
 MB.isMage = false

@@ -16,13 +16,13 @@ local PAGE_WIDTH = WIDTH - SIDEBAR - 54 -- usable width of a settings page
 local SECTIONS = {
     { key = "general", label = "General", icon = "Interface\\Icons\\Trade_Engineering" },
     { key = "radial", label = "Radial Menu", icon = "Interface\\Icons\\Spell_Holy_MagicalSentry" },
-    { key = "layout", label = "Menu Layout", icon = "Interface\\Icons\\INV_Misc_Gear_01" },
     { key = "buffwatch", label = "Buff Watch", icon = "Interface\\Icons\\Spell_Holy_ArcaneIntellect" },
     { key = "reagents", label = "Reagents", icon = "Interface\\Icons\\INV_Misc_Rune_06" },
     { key = "conjuring", label = "Conjuring", icon = "Interface\\Icons\\INV_Drink_07" },
     { key = "trading", label = "Trading", icon = "Interface\\Icons\\INV_Misc_Bag_10" },
     { key = "announce", label = "Announcements", icon = "Interface\\Icons\\Spell_Arcane_PortalStormWind" },
     { key = "appearance", label = "Appearance", icon = "Interface\\Icons\\INV_Misc_Gem_Sapphire_02" },
+    { key = "layout", label = "Menu Layout", icon = "Interface\\Icons\\INV_Misc_Gear_01" },
 }
 
 local IGNORED_KEYS = {
@@ -69,6 +69,32 @@ local function Field(section, getTable, key)
     end
 end
 
+
+--- The arrangement and the button shape, which the Appearance page and the
+--- Menu Layout page both offer. One get/set pair for both, in the spirit of
+--- AutoTradeField above, so the two controls cannot drift apart.
+---
+--- The section fired is "radial", not "layout", whichever page the control is
+--- on. Radial:Apply only rebuilds the menu for nil, "all", "general" or
+--- "radial", so a "layout" event would be heard by nothing and changing the
+--- arrangement would appear to do nothing at all.
+local function RadialField(key)
+    return Field("radial", function() return MB.db.radial end, key)
+end
+
+--- The arrangements, in the order Layout.lua lists them.
+local function PresetOptions()
+    local out = {}
+    for i = 1, #MB.Layout.PRESETS do
+        out[i] = { MB.Layout.PRESETS[i][1], MB.Layout.PRESETS[i][2] }
+    end
+    return out
+end
+
+local SHAPE_OPTIONS = { { "round", "Round" }, { "square", "Square" } }
+
+local ARRANGEMENT_HELP = "How the buttons sit around the orb. Classic Radial is the original circle and is unaffected by the sizes on the Menu Layout page."
+local SHAPE_HELP = "Round or square buttons. The orb takes the same shape, so the launcher matches what it opens. Classic Radial is always round."
 --- Automatic trade filling, which both the Trading page and the greeting
 --- switch on and off. Switching it on gives a trade window that is already
 --- open another go, so ticking it mid-trade is not a dead click.
@@ -557,22 +583,14 @@ builders.layout = function(page)
     local function radial() return MB.db.radial end
     local function whole(value) return tostring(math.floor(value + 0.5)) end
 
-    local presets = {}
-    for i = 1, #MB.Layout.PRESETS do
-        presets[i] = { MB.Layout.PRESETS[i][1], MB.Layout.PRESETS[i][2] }
-    end
-
     Header(page, 0, "Menu Layout")
     Label(page, 0, -34, "Arrangement", 12, nil, 114)
-    Cycle(page, 120, -30, 170, "Arrangement",
-        "How the buttons sit around the orb. Classic Radial is the original circle and is unaffected by anything else on this page.",
-        presets, Field("radial", radial, "preset"))
+    Cycle(page, 120, -30, 170, "Arrangement", ARRANGEMENT_HELP,
+        PresetOptions(), RadialField("preset"))
 
     Label(page, 0, -64, "Button shape", 12, nil, 114)
-    Cycle(page, 120, -60, 110, "Button shape",
-        "Round or square buttons. The orb itself stays round: its sphere, halo and ripple are drawn from round artwork with no square counterpart.",
-        { { "round", "Round" }, { "square", "Square" } },
-        Field("radial", radial, "buttonShape"))
+    Cycle(page, 120, -60, 110, "Button shape", SHAPE_HELP,
+        SHAPE_OPTIONS, RadialField("buttonShape"))
 
     Label(page, 0, -94, "Opens towards", 12, nil, 114)
     Cycle(page, 120, -90, 110, "Opens towards",
@@ -587,7 +605,7 @@ builders.layout = function(page)
     Slider(page, 0, -172, 200, "Grid columns", "How many across the Compact Grid uses.", 1, 6, 1, whole,
         Field("radial", radial, "columns"))
 
-    Note(page, -214, "Classic Radial keeps its own radius and button size on the Radial Menu page. The other arrangements use the button size from there and the gaps from here.")
+    Note(page, -214, "Classic Radial keeps its own radius and button size on the Radial Menu page. The other arrangements use the button size from there and the gaps from here. Near a screen edge an arrangement is mirrored onto whichever side has room, so the preview below shows it with the orb in open space.")
 
     -- The preview. Plain textures on a plain frame: it is not built from a
     -- secure template, sets no attributes and casts nothing, so it is not
@@ -634,6 +652,7 @@ builders.layout = function(page)
             radius = db.radius,
         })
 
+        launcher:SetTexture(shape)
         launcher:ClearAllPoints()
         launcher:SetPoint("CENTER", stage, "CENTER", 0, 0)
 
@@ -658,7 +677,7 @@ builders.layout = function(page)
             dots[i]:SetPoint("CENTER", stage, "CENTER", positions[i].x * scale, positions[i].y * scale)
             dots[i]:Show()
         end
-        caption:SetText("Six buttons shown. The menu uses however many you have switched on, on the Radial Menu page.")
+        caption:SetText("Six buttons shown, with room on every side. The menu uses however many you have switched on, on the Radial Menu page.")
     end
 end
 
@@ -1015,6 +1034,21 @@ builders.appearance = function(page)
         "Which layer of the interface MageButler draws on. Raise it to keep the orb above other addons, lower it to tuck it behind them. Everything moves together and keeps its own order: the orb at the layer you pick, the panels and the toast just above it, the settings window above those.",
         strataOptions,
         Field("appearance", appearance, "strata"))
+
+    -- The arrangement and the shape are here as well as on the Menu Layout
+    -- page: they are what the menu looks like, which is what a player opens
+    -- Appearance for. Both share one get/set pair with that page through
+    -- RadialField, so neither can drift from the other. The sizes, the
+    -- direction and the preview stay there, where there is room for them.
+    Label(page, 0, -194, "Menu arrangement", 12, nil, 114)
+    Cycle(page, 120, -190, 170, "Menu arrangement", ARRANGEMENT_HELP,
+        PresetOptions(), RadialField("preset"))
+
+    Label(page, 0, -224, "Button shape", 12, nil, 114)
+    Cycle(page, 120, -220, 110, "Button shape", SHAPE_HELP,
+        SHAPE_OPTIONS, RadialField("buttonShape"))
+
+    Note(page, -256, "The Menu Layout page has the gaps, the grid's columns, which way a toolbar runs, and a preview of the arrangement you pick.")
 end
 
 -------------------------------------------------------------------------------

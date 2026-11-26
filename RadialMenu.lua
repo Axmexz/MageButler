@@ -126,7 +126,13 @@ local function CreateOrb()
         mask:SetTexture(MB.MEDIA .. "Circle.tga", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         mask:SetAllPoints(orb.icon)
         orb.icon:AddMaskTexture(mask)
+        orb.mask = mask
     end
+
+    -- What shape it is now, so SetOrbShape knows the first call for a round
+    -- orb has nothing to do. Without this it would add a second mask on top
+    -- of the one just made, and masks multiply rather than replace.
+    orb.mbShape = "round"
 
     orb.ring = orb:CreateTexture(nil, "OVERLAY")
     orb.ring:SetTexture(MB.MEDIA .. "Ring.tga")
@@ -755,6 +761,29 @@ local function OpenRight()
     return cx * orb:GetScale() < UIParent:GetWidth() * 0.6
 end
 
+
+--- How far the orb's centre sits from each screen edge, in the menu's own
+--- units, which is what Layout.lua needs in order to mirror an arrangement
+--- away from an edge it would otherwise run off.
+---
+--- The classic circle does not use this: it has its own edge policy in
+--- ArcFor, which swings the buttons onto a half circle instead and is left
+--- exactly as it was.
+---
+--- Returns nil before the orb has been placed, which leaves the arrangement
+--- unmirrored rather than guessing at where it is.
+local function RoomFor()
+    local cx, cy = orb:GetCenter()
+    if not cx then return nil end
+    local scale = orb:GetScale()
+    if not scale or scale <= 0 then scale = 1 end
+    return {
+        left = cx,
+        down = cy,
+        right = UIParent:GetWidth() / scale - cx,
+        up = UIParent:GetHeight() / scale - cy,
+    }
+end
 --- The original arrangement: buttons on a circle around the orb, or on an
 --- arc where the screen edge leaves no room for a full one.
 ---
@@ -821,6 +850,7 @@ local function LayoutEngine(db, visible)
         columns = db.columns,
         direction = db.direction,
         radius = db.radius,
+        room = RoomFor(),
     })
     if not positions then return false end
 
@@ -887,15 +917,17 @@ function Radial:Layout()
     --
     -- Classic Radial is round, full stop. The shape setting belongs to the
     -- other arrangements, and reaching it cannot change the original.
-    -- The orb itself stays round. Its artwork is a sphere with a halo, a
-    -- ripple and a flash, all drawn from radial textures, and none of them has
-    -- a square counterpart; squaring it is its own piece of work, not a
-    -- side effect of this setting.
+    --
+    -- The orb follows the buttons it opens. Its halo, click flash and hover
+    -- glow stay as they are: they are soft radial falloffs with no edge to
+    -- give a shape away, and swapping them would mean square glows nothing
+    -- else uses.
     local engine = MB.Layout:Handles(db.preset)
     local shape = engine and db.buttonShape or "round"
     for _, key in ipairs(ORDER) do
         Theme:SetShape(buttons[key], shape)
     end
+    Theme:SetOrbShape(orb, shape)
 
     if engine and LayoutEngine(db, visible) then return end
     self.clearance = nil

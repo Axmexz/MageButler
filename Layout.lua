@@ -197,6 +197,73 @@ placers.tFormation = function(count, o)
 end
 
 -------------------------------------------------------------------------------
+-- Staying on screen
+--
+-- Every arrangement here leans somewhere: a toolbar runs one way, a grid
+-- hangs below, an arc sits above. Near a screen edge that lean puts buttons
+-- where the player cannot click them.
+--
+-- The answer is one rule for all eleven rather than an edge policy per
+-- arrangement: mirror the whole thing. Each is either symmetric across an
+-- axis (where mirroring it changes nothing) or directional (where mirroring
+-- it is exactly the other direction), so the four candidates below are
+-- always arrangements the player could have asked for by hand. That is why
+-- it can be one rule, and why it is arithmetic rather than a special case
+-- bolted onto each placer.
+--
+-- `room` is how far the orb's centre is from each screen edge, in the menu's
+-- own units. Without it nothing is mirrored, which is what the settings
+-- preview wants: it should draw the arrangement as chosen, not as some
+-- screen position would bend it.
+-------------------------------------------------------------------------------
+
+local MARGIN = 6
+
+--- How far a mirrored copy would hang off the screen, in total. Zero means it
+--- fits. Measured as a sum rather than a yes/no so that where nothing fits -
+--- a toolbar wider than the screen - the least bad side still wins.
+local function Overflow(positions, half, room, flipX, flipY)
+    local over = 0
+    for i = 1, #positions do
+        local x, y = positions[i].x * flipX, positions[i].y * flipY
+        over = over + math.max(0, (x + half + MARGIN) - room.right)
+        over = over + math.max(0, (-x + half + MARGIN) - room.left)
+        over = over + math.max(0, (y + half + MARGIN) - room.up)
+        over = over + math.max(0, (-y + half + MARGIN) - room.down)
+    end
+    return over
+end
+
+--- Mirrors the arrangement onto whichever side has room for it.
+---
+--- The unmirrored arrangement is tried first and kept on a tie, so a player
+--- with room all round always gets precisely what they chose.
+local function KeepOnScreen(positions, o, room)
+    if not room then return positions, 1, 1 end
+    for _, key in ipairs({ "left", "right", "up", "down" }) do
+        if type(room[key]) ~= "number" then return positions, 1, 1 end
+    end
+
+    local half = o.size / 2
+    local bestX, bestY = 1, 1
+    local best = Overflow(positions, half, room, 1, 1)
+    for _, pair in ipairs({ { -1, 1 }, { 1, -1 }, { -1, -1 } }) do
+        if best <= 0 then break end
+        local over = Overflow(positions, half, room, pair[1], pair[2])
+        if over < best then
+            best, bestX, bestY = over, pair[1], pair[2]
+        end
+    end
+
+    if bestX == 1 and bestY == 1 then return positions, 1, 1 end
+    for i = 1, #positions do
+        positions[i].x = positions[i].x * bestX
+        positions[i].y = positions[i].y * bestY
+    end
+    return positions, bestX, bestY
+end
+
+-------------------------------------------------------------------------------
 -- The one entry point
 -------------------------------------------------------------------------------
 local DEFAULTS = {
@@ -211,6 +278,11 @@ local DEFAULTS = {
 --- centre the arrangement reaches, which is what Buff Watch needs in order to
 --- park its list clear of the buttons.
 ---
+--- `opts.room` is how far the orb's centre sits from each screen edge, under
+--- the keys left, right, up and down, in the menu's own units. Given it, an
+--- arrangement that would run off the screen is mirrored onto the side that
+--- has room. Left out, nothing is mirrored.
+---
 --- An unknown preset returns nothing, so a profile carrying a name this
 --- version does not have falls back to the classic path rather than erroring.
 function Layout:Positions(preset, count, opts)
@@ -224,10 +296,15 @@ function Layout:Positions(preset, count, opts)
     end
 
     local positions = place(count, o)
+    local flipX, flipY
+    positions, flipX, flipY = KeepOnScreen(positions, o, opts and opts.room)
 
     -- The frame stays centred on the orb, so it has to reach the furthest
     -- button on whichever side that is, and the same distance the other way.
-    local reachX, reachY, top = 0, 0, 0
+    -- Clearance starts at the orb itself: an arrangement that hangs entirely
+    -- below it still reaches that far up, and Buff Watch parking its list on
+    -- a clearance of nothing would drop it over the orb.
+    local reachX, reachY, top = 0, 0, o.launcher / 2
     for i = 1, #positions do
         local p = positions[i]
         reachX = math.max(reachX, math.abs(p.x) + o.size / 2)
@@ -235,5 +312,5 @@ function Layout:Positions(preset, count, opts)
         top = math.max(top, p.y + o.size / 2)
     end
 
-    return positions, reachX * 2, reachY * 2, top
+    return positions, reachX * 2, reachY * 2, top, flipX, flipY
 end

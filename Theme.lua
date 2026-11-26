@@ -305,6 +305,47 @@ function Theme:SetShape(button, shape)
     end
 end
 
+
+--- Puts the orb itself into "round" or "square", so the launcher matches the
+--- buttons it opens rather than sitting as a lone circle beside a row of
+--- squares.
+---
+--- Three of its textures have a square counterpart and are swapped: the
+--- shaded core, the border ring, and the ring that travels outwards while
+--- something needs attention. The halo, the click flash and the hover glow
+--- are soft radial falloffs with no edge of their own to give away a shape,
+--- and they read the same behind either, so they are left alone.
+---
+--- The icon's mask is removed for a square and restored for a circle, for
+--- the same reason as on the buttons: masks stack rather than replace, and a
+--- square mask over a square icon does nothing.
+---
+--- Every one of these is a texture, so none of it is protected and all of it
+--- can be done in a fight. It is still called from the combat queue with the
+--- placement, because a square orb over circular buttons is worse than
+--- waiting for the end of the fight.
+function Theme:SetOrbShape(orb, shape)
+    if not orb or not orb.core then return end
+    local media = MB.MEDIA
+    local square = shape == "square"
+    if orb.mbShape == shape then return end
+    orb.mbShape = shape
+
+    orb.core:SetTexture(media .. (square and "SquareOrb.tga" or "Orb.tga"))
+    local ring = media .. (square and "SquareRing.tga" or "Ring.tga")
+    orb.ring:SetTexture(ring)
+    if orb.wave then orb.wave:SetTexture(ring) end
+
+    local mask = orb.mask
+    if mask and orb.icon.AddMaskTexture then
+        if square then
+            orb.icon:RemoveMaskTexture(mask)
+        else
+            mask:SetTexture(media .. "Circle.tga", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            orb.icon:AddMaskTexture(mask)
+        end
+    end
+end
 --- A small status light on the rim of the orb: a dark disc with a coloured
 --- dot in it. `point` is the corner of the orb it sits on.
 function Theme:CreatePip(orb, point, x, y)

@@ -133,6 +133,20 @@ function Theme:UseStrata(frame, offset)
     self:RefreshStrata()
 end
 
+--- Puts `frame` on one layer for good, out of the player's reach.
+---
+--- This is for MageButler's own windows, which are not part of the thing the
+--- UI Strata setting is for. That setting exists to move the orb and what
+--- hangs off it relative to other addons; a window the player opened, read
+--- and will close again has no business following it, and following it is
+--- how the settings window ends up underneath the orb it is being used to
+--- configure.
+---
+--- Not registered with the list above, so no later RefreshStrata moves it.
+function Theme:FixStrata(frame, name)
+    frame:SetFrameStrata(name or "FULLSCREEN")
+end
+
 --- Keeps `object` tinted with the accent colour, including after it changes.
 function Theme:UseAccent(object, method, alpha)
     alpha = alpha or 1

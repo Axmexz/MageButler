@@ -65,8 +65,20 @@ local function Beside(o)
     return o.launcher / 2 + o.gapX + o.size / 2
 end
 
+--- How far out a ring reaches, across and down.
+---
+--- The arrangements that sit around the orb used to take the radius and
+--- nothing else, so the two gap sliders did nothing at all on four of the
+--- eleven. The gaps widen the ring instead: across and down separately, which
+--- is what the two sliders say they do and lets a ring be made oval to clear
+--- something on one axis. The radius from the Radial Menu page stays what it
+--- was, the size of the ring before any gap is added.
+local function Ring(o)
+    return o.radius + o.gapX, o.radius + o.gapY
+end
+
 --- Buttons spread along an arc of `span` degrees centred on `centre`.
-local function OnArc(count, radius, centre, span, stretch)
+local function OnArc(count, rx, ry, centre, span, stretch)
     local out = {}
     for i = 1, count do
         local degrees
@@ -77,8 +89,8 @@ local function OnArc(count, radius, centre, span, stretch)
         end
         local angle = math.rad(degrees)
         out[i] = {
-            x = radius * math.cos(angle) * (stretch or 1),
-            y = radius * math.sin(angle),
+            x = rx * math.cos(angle) * (stretch or 1),
+            y = ry * math.sin(angle),
         }
     end
     return out
@@ -102,10 +114,11 @@ end
 -- can carry square buttons. Never used for Classic Radial itself.
 placers.customRadial = function(count, o)
     local out = {}
+    local rx, ry = Ring(o)
     for i = 1, count do
         -- From the top and clockwise, the same way the classic circle runs.
         local angle = math.rad(90 - (i - 1) * 360 / count)
-        out[i] = { x = o.radius * math.cos(angle), y = o.radius * math.sin(angle) }
+        out[i] = { x = rx * math.cos(angle), y = ry * math.sin(angle) }
     end
     return out
 end
@@ -142,26 +155,29 @@ end
 
 -- An arc over the launcher, which sits below its centre.
 placers.arc = function(count, o)
-    return OnArc(count, o.radius, 90, 160)
+    local rx, ry = Ring(o)
+    return OnArc(count, rx, ry, 90, 160)
 end
 
 -- The same idea, opened out wider and flattened. A half circle, not more:
 -- past 180 degrees the ends drop below the launcher instead of fanning
 -- above it.
 placers.fan = function(count, o)
-    return OnArc(count, o.radius, 90, 180, 1.25)
+    local rx, ry = Ring(o)
+    return OnArc(count, rx, ry, 90, 180, 1.25)
 end
 
 -- A circle pushed out to its corners, so the buttons sit on a diamond.
 placers.diamond = function(count, o)
     local out = {}
+    local rx, ry = Ring(o)
     for i = 1, count do
         local angle = math.rad(90 - (i - 1) * 360 / count)
         local cos, sin = math.cos(angle), math.sin(angle)
         -- On a diamond |x| + |y| is constant, so pull the point in or out
         -- until it is. Never divides by zero: |cos| + |sin| >= 1.
-        local reach = o.radius / (math.abs(cos) + math.abs(sin))
-        out[i] = { x = reach * cos, y = reach * sin }
+        local reach = 1 / (math.abs(cos) + math.abs(sin))
+        out[i] = { x = reach * cos * rx, y = reach * sin * ry }
     end
     return out
 end

@@ -5,11 +5,10 @@ local _, MB = ...
 local Settings = MB:NewModule("Settings")
 local Theme
 
--- The Appearance page is the tallest and sets the height: it carries the
--- whole of the menu's arrangement and a preview of it, and ends near -602 of
--- the page's 608. The Announcements page, which used to set this, ends near
--- -484 and now has room to spare.
-local WIDTH, HEIGHT = 640, 680
+-- The Announcements page is the tallest and sets the height: with a preview
+-- under each of its three messages it needs every pixel of this. Appearance,
+-- which carries the menu's arrangement too, ends near -452.
+local WIDTH, HEIGHT = 640, 576
 local SIDEBAR = 152
 local TITLE = 38
 local COLUMN = 215 -- horizontal distance between option columns
@@ -398,7 +397,11 @@ local function Dropdown(page, x, y, width, title, tooltip, options, get, set)
         list = CreateFrame("Frame", nil, host)
         list:SetSize(math.max(width, 80), #options * ROW_H + 8)
         Theme:CreatePanel(nil, list, "raised"):SetAllPoints()
-        Theme:UseStrata(list, 3)   -- the settings window and the greeting are 2
+        -- No strata of its own: a frame inherits its parent, so the list
+        -- stays with whatever window it belongs to and the frame level above
+        -- puts it over the page. Setting one here would have to be kept in
+        -- step with the window by hand.
+
         list:SetFrameLevel(host:GetFrameLevel() + 20)
         list:Hide()
 
@@ -1027,10 +1030,10 @@ end
 -- looks like, and the shape of the menu is the largest part of that; two
 -- pages meant choosing between them first.
 --
--- This is now the tallest page and sets the window's height, which the
--- Announcements page used to set. There is about one row spare under the
--- preview, so anything else added here needs the window taller again
--- (HEIGHT at the top of this file).
+-- It ends near -452 of the page's 504. A preview of the arrangement sat
+-- under that for a day and was taken out: drawn at a fifth of its size it
+-- said little the names did not, and it cost the whole window 104 pixels of
+-- height to carry.
 --
 -- Everything in the layout half is stored under `radial` and fires
 -- Changed("radial"). Radial:Apply only rebuilds the menu for nil, "all",
@@ -1081,7 +1084,7 @@ builders.appearance = function(page)
 
     Label(page, 0, -148, "UI Strata", 12, nil, 114)
     Dropdown(page, 120, -144, 150, "UI Strata",
-        "Which layer of the interface MageButler draws on. Raise it to keep the orb above other addons, lower it to tuck it behind them. Everything moves together and keeps its own order: the orb at the layer you pick, the panels and the toast just above it, the settings window above those.",
+        "Which layer of the interface the orb draws on. Raise it to keep the orb above other addons, lower it to tuck it behind them. The orb and its menu sit at the layer you pick, with the submenus, panels and the toast just above. This window and the welcome screen are not affected: they stay on their own layer so they are never buried under the orb they are setting up.",
         strataOptions,
         Field("appearance", appearance, "strata"))
 
@@ -1101,82 +1104,14 @@ builders.appearance = function(page)
         { { "down", "Down" }, { "up", "Up" }, { "right", "Right" }, { "left", "Left" } },
         RadialField("direction"))
 
-    Slider(page, 0, -312, 200, "Gap across", "Space between buttons side to side.", 0, 40, 1, whole,
+    Slider(page, 0, -312, 200, "Gap across", "Space between buttons side to side. On the arrangements that sit around the orb it widens the ring across.", 0, 40, 1, whole,
         RadialField("gapX"))
-    Slider(page, COLUMN, -312, 200, "Gap down", "Space between rows.", 0, 40, 1, whole,
+    Slider(page, COLUMN, -312, 200, "Gap down", "Space between rows. On the arrangements that sit around the orb it widens the ring downwards, so the two together can make it oval.", 0, 40, 1, whole,
         RadialField("gapY"))
     Slider(page, 0, -358, 200, "Grid columns", "How many across the Compact Grid uses.", 1, 6, 1, whole,
         RadialField("columns"))
 
-    Note(page, -404, "Classic Radial keeps its own radius and button size on the Radial Menu page, and stays round whatever shape is set here. The other arrangements take the button size from that page and the gaps from this one. Near a screen edge an arrangement is mirrored onto whichever side has room, so the preview below shows it with the orb in open space.")
-
-    -- The preview. Plain textures on a plain frame: it is not built from a
-    -- secure template, sets no attributes and casts nothing, so it is not
-    -- protected and can redraw in combat while the real menu waits.
-    local stage = CreateFrame("Frame", nil, page)
-    stage:SetPoint("TOPLEFT", 0, -452)
-    stage:SetSize(PAGE_WIDTH, 150)
-
-    local field = Theme:CreatePanel(nil, stage, "bg")
-    field:SetAllPoints()
-
-    -- Built once. The refresher only moves them: Refresh runs every refresher
-    -- on every page on every settings change, so creating anything in here
-    -- would leak a texture per keystroke.
-    local launcher = stage:CreateTexture(nil, "ARTWORK")
-    launcher:SetTexture(MB.MEDIA .. "Circle.tga")
-    launcher:SetSize(15, 15)
-    Theme:UseAccent(launcher, "SetVertexColor", 1)
-
-    local dots = {}
-    for i = 1, 6 do
-        local dot = stage:CreateTexture(nil, "ARTWORK")
-        dot:SetSize(13, 13)
-        dot:SetVertexColor(Theme:Color("text"))
-        dots[i] = dot
-    end
-
-    refreshers[#refreshers + 1] = function()
-        local db = MB.db.radial
-        local square = MB.Layout:Handles(db.preset) and db.buttonShape == "square"
-        local shape = MB.MEDIA .. (square and "Square.tga" or "Circle.tga")
-
-        -- Everything is drawn at a fifth of its size, so a toolbar six buttons
-        -- long still fits the panel; the arrangement is the same arithmetic
-        -- the menu itself uses, so the two cannot drift apart.
-        local scale = 0.2
-        local positions = MB.Layout:Positions(db.preset, 6, {
-            size = db.buttonSize, launcher = 46,
-            gapX = db.gapX, gapY = db.gapY,
-            columns = db.columns, direction = db.direction,
-            radius = db.radius,
-        })
-
-        launcher:SetTexture(shape)
-        launcher:ClearAllPoints()
-        launcher:SetPoint("CENTER", stage, "CENTER", 0, 0)
-
-        if not positions then
-            -- Classic Radial, or a name this build does not know: draw the
-            -- circle it will actually get.
-            for i = 1, 6 do
-                local angle = math.rad(90 - (i - 1) * 60)
-                dots[i]:SetTexture(MB.MEDIA .. "Circle.tga")
-                dots[i]:ClearAllPoints()
-                dots[i]:SetPoint("CENTER", stage, "CENTER",
-                    db.radius * scale * math.cos(angle), db.radius * scale * math.sin(angle))
-                dots[i]:Show()
-            end
-            return
-        end
-
-        for i = 1, 6 do
-            dots[i]:SetTexture(shape)
-            dots[i]:ClearAllPoints()
-            dots[i]:SetPoint("CENTER", stage, "CENTER", positions[i].x * scale, positions[i].y * scale)
-            dots[i]:Show()
-        end
-    end
+    Note(page, -404, "Classic Radial keeps its own radius and button size on the Radial Menu page, and stays round whatever shape is set here. The other arrangements take the button size from that page and the gaps from this one; a single row or column has only the one gap to give. Near a screen edge an arrangement is mirrored onto whichever side has room.")
 end
 
 -------------------------------------------------------------------------------
@@ -1247,7 +1182,7 @@ local function CreateFrameOnce()
     frame = Theme:CreatePanel("MageButlerSettings", UIParent, "bg")
     frame:SetSize(WIDTH, HEIGHT)
     frame:SetPoint("CENTER")
-    Theme:UseStrata(frame, 2)
+    Theme:FixStrata(frame)
     frame:SetClampedToScreen(true)
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -1373,7 +1308,7 @@ local function CreateWelcome()
     welcome = Theme:CreatePanel("MageButlerWelcome", UIParent, "bg")
     welcome:SetSize(416, WELCOME_HEIGHT)
     welcome:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
-    Theme:UseStrata(welcome, 2)
+    Theme:FixStrata(welcome)
     welcome:SetClampedToScreen(true)
     welcome:SetMovable(true)
     welcome:EnableMouse(true)
